@@ -1,3 +1,4 @@
+import static org.opendatakit.aggregate.gradle.Util.getValue
 import static org.opendatakit.aggregate.gradle.Util.getVersionName
 
 buildscript {
@@ -6,7 +7,6 @@ buildscript {
   }
   dependencies {
     classpath 'de.richsource.gradle.plugins:gwt-gradle-plugin:0.6'
-    classpath 'de.undercouch:gradle-download-task:3.3.0'
     classpath "com.avast.gradle:gradle-docker-compose-plugin:0.6.8"
   }
 }
@@ -20,20 +20,19 @@ plugins {
   id 'de.fuerstenau.buildconfig' version '1.1.8'
 }
 apply plugin: 'gwt'
-apply plugin: 'de.undercouch.download'
 apply from: 'https://raw.github.com/akhikhl/gretty/master/pluginScripts/gretty.plugin'
 apply plugin: 'docker-compose'
-
 
 group = 'org.opendatakit'
 version = getVersionName()
 description = ""
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 repositories {
   mavenCentral()
+  maven { url = 'https://oss.sonatype.org/content/groups/public' }
 
   flatDir {
     dirs 'libs'
@@ -44,7 +43,7 @@ def versions = [
     spring        : '4.3.4.RELEASE',
     springSecurity: '4.2.0.RELEASE',
     gwt           : [
-        servlet      : '2.7.0',
+        servlet      : '2.8.2',
         googleMapsV3 : '1.0.1',
         visualization: '1.1.2'
     ],
@@ -65,20 +64,15 @@ def versions = [
         sheets: 'v4-rev38-1.22.0',
         drive : 'v3-rev52-1.22.0'
     ],
-    wink          : '1.4',
     gson          : '2.8.0',
     kxml2         : '2.3.0',
     odk           : [
-        javarosa     : '2.6.0',
-        httpclientGae: '4.5.2-1',
-        tomcatUtil   : '1.0.1'
+        javarosa: '2.17.0'
     ],
     jdbc          : [
         mysql     : '5.1.44',
         postgresql: '42.1.4.jre7'
     ],
-    gae           : '1.9.54',
-    odkTomcatUtil : '1.0.1',
     servletApi    : '3.1.0',
     junit         : '4.12',
     mockito       : '2.+'
@@ -94,7 +88,6 @@ dependencies {
   compile group: 'org.slf4j', name: 'log4j-over-slf4j', version: '1.7.25'
   compile group: 'org.slf4j', name: 'slf4j-jdk14', version: '1.7.25'
 
-  compile group: 'org.opendatakit', name: 'odk-tomcatutil', version: versions.odk.tomcatUtil
   compile group: 'org.springframework', name: 'spring-aop', version: versions.spring
   compile group: 'org.springframework', name: 'spring-aspects', version: versions.spring
   compile group: 'org.springframework', name: 'spring-beans', version: versions.spring
@@ -131,23 +124,14 @@ dependencies {
   compile group: 'com.google.api-client', name: 'google-api-client-appengine', version: versions.googleApi.client
   compile group: 'com.google.apis', name: 'google-api-services-sheets', version: versions.googleApi.sheets
   compile group: 'com.google.apis', name: 'google-api-services-drive', version: versions.googleApi.drive
-  compile group: 'org.apache.wink', name: 'wink-common', version: versions.wink
-  compile group: 'org.apache.wink', name: 'wink-server', version: versions.wink
   compile group: 'com.google.code.gson', name: 'gson', version: versions.gson
   compile group: 'net.sf.kxml', name: 'kxml2', version: versions.kxml2
   compile group: 'org.opendatakit', name: 'opendatakit-javarosa', version: versions.odk.javarosa
-  compile group: 'org.opendatakit', name: 'odk-httpclient-gae', version: versions.odk.httpclientGae
   compile group: 'mysql', name: 'mysql-connector-java', version: versions.jdbc.mysql
   compile group: 'org.postgresql', name: 'postgresql', version: versions.jdbc.postgresql
-  compile group: 'org.opendatakit', name: 'odk-tomcatutil', version: versions.odkTomcatUtil
-  compile group: 'com.google.appengine', name: 'appengine-api-1.0-sdk', version: versions.gae
-  compile group: 'com.google.appengine', name: 'appengine-api-labs', version: versions.gae
-  compile group: 'com.google.appengine', name: 'appengine-jsr107cache', version: versions.gae
   compileOnly group: 'javax.servlet', name: 'javax.servlet-api', version: versions.servletApi
   testCompile group: 'junit', name: 'junit', version: versions.junit
   testCompile group: 'org.springframework', name: 'spring-test', version: versions.spring
-  testCompile group: 'com.google.appengine', name: 'appengine-api-stubs', version: versions.gae
-  testCompile group: 'com.google.appengine', name: 'appengine-testing', version: versions.gae
   testCompile group: 'org.mockito', name: 'mockito-core', version: versions.mockito
 }
 
@@ -159,9 +143,7 @@ gwt {
 }
 
 war {
-  if (warMode == "installer") {
-    println "Excluding Guava from WAR"
-    war.rootSpec.exclude("**/guava*.jar")
+  if (getValue(this, 'warMode', 'complete') == "installer") {
     println "Excluding config files from WAR"
     war.rootSpec.exclude "jdbc.properties"
     war.rootSpec.exclude "logging.properties"
@@ -199,7 +181,26 @@ dockerCompose {
   }
 }
 
-apply from: 'common.gradle'
-apply from: 'gae.gradle'
+task("checkConf") {
+  group = 'build'
+  description = 'Checks that all the conf files are present'
+
+  doLast {
+    def missingFiles = [
+        "jdbc.properties",
+        "security.properties",
+        "odk-settings.xml"
+    ].findAll({ filename -> !new File("${projectDir}/src/main/resources/${filename}").exists() })
+    if (!missingFiles.isEmpty())
+      if(!project.gradle.startParameter.taskRequests.args[0].any{it.contains("docker")}){
+        throw new GradleException("Missing configuration files at src/main/resources: ${missingFiles}")
+      }
+  }
+}
+
+compileJava.dependsOn checkConf
+
 apply from: 'installer.gradle'
 apply from: 'packer.gradle'
+apply from: 'docker-compose.gradle'
+apply from: 'docker.gradle'

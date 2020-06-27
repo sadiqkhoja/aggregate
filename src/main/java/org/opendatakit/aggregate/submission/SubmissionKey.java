@@ -17,7 +17,6 @@ package org.opendatakit.aggregate.submission;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.opendatakit.aggregate.constants.ParserConsts;
 import org.opendatakit.common.web.constants.BasicConsts;
 
@@ -27,7 +26,6 @@ import org.opendatakit.common.web.constants.BasicConsts;
  *
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- *
  */
 public class SubmissionKey {
 
@@ -37,15 +35,6 @@ public class SubmissionKey {
     this.key = key;
   }
 
-  /**
-   * Used by form deletion.
-   *
-   * @param formId
-   * @param modelVersion
-   * @param uiVersion
-   * @param topLevelGroupElementName
-   * @param uri
-   */
   public SubmissionKey(String formId, String topLevelGroupElementName, String uri) {
     StringBuilder b = new StringBuilder();
     b.append(formId);
@@ -66,16 +55,6 @@ public class SubmissionKey {
     return key;
   }
 
-  /**
-   * Parse the SubmissionKey into its individual parts.
-   * This is complicated by:
-   * <ol>
-   * <li>formId may contain slashes</li>
-   * <li>key may contain slashes</li>
-   * </ol>
-   *
-   * @return List&lt;SubmissionKeyPart&gt; of the parts of the key
-   */
   public final List<SubmissionKeyPart> splitSubmissionKey() {
     List<SubmissionKeyPart> parts = new ArrayList<SubmissionKeyPart>();
     List<String> stringParts = new ArrayList<String>();
@@ -110,9 +89,9 @@ public class SubmissionKey {
 
       int idx = remainder.indexOf(SubmissionKeyPart.K_CLOSE_BRACKET_SLASH);
       if (idx == -1) {
-        int endIndex = remainder.length()-1;
+        int endIndex = remainder.length() - 1;
         char lastChar = remainder.charAt(endIndex);
-        if(lastChar == ']') {
+        if (lastChar == ']') {
           firstPart = remainder.substring(0, endIndex + 1);
           remainder = remainder.substring(endIndex + 1);
         } else {
@@ -122,7 +101,7 @@ public class SubmissionKey {
         firstPart = remainder.substring(0, idx + 1);
         remainder = remainder.substring(idx + SubmissionKeyPart.K_CLOSE_BRACKET_SLASH.length());
       }
-        
+
       // firstPart is the elementname[@key=...] string
       stringParts.add(firstPart);
     }

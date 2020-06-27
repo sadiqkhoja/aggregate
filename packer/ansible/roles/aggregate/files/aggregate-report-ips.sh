@@ -5,7 +5,7 @@ rawHostname=$(grep hostname ${propsFile} | awk '{split($0,a,"="); print a[2]}')
 hostname=${rawHostname:-localhost}
 httpPort=$(grep port ${propsFile} | awk '{split($0,a,"="); print a[2]}')
 version=$(cat /usr/local/bin/aggregate-version)
-ips=$(ip address | grep "inet " | grep -v "127.0.0.1" | awk '{print $2}' | awk -F'/' '{print $1}')
+ips=$(hostname -I)
 
 echo "> Welcome to ODK Aggregate VM $version"
 echo "> 1. Open the web browser on your computer"
@@ -15,7 +15,7 @@ else
   echo "> 2. Go to http://${hostname}:${httpPort}"
 fi
 echo "> 3. Sign in with the Aggregate password"
-echo "> Need the password? Read the readme.txt file."
+echo "> Need help? Go to https://docs.getodk.org/aggregate-vm"
 echo ""
 
 if [ ! -z ${ips} ]; then

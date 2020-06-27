@@ -16,14 +16,15 @@
 
 package org.opendatakit.aggregate.client.table;
 
-import java.util.ArrayList;
+import static org.opendatakit.common.utils.GwtShims.gwtFormatDateTimeHuman;
 
+import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
+import com.google.gwt.user.client.ui.FlexTable;
+import com.google.gwt.user.client.ui.HTML;
+import java.util.ArrayList;
 import org.opendatakit.aggregate.client.form.ExportSummary;
 import org.opendatakit.aggregate.client.widgets.DeleteExportButton;
 import org.opendatakit.aggregate.constants.common.ExportStatus;
-
-import com.google.gwt.user.client.ui.FlexTable;
-import com.google.gwt.user.client.ui.HTML;
 
 /**
  * List all the requests for downloadable documents and their status.
@@ -41,7 +42,7 @@ public class ExportTable extends FlexTable {
 
   public ExportTable() {
     super();
-    this.setHTML(0, 1, "<h2 id=\"form_name\">Exported Files</h2>"); 
+    this.setHTML(0, 1, "<h2 id=\"form_name\">Exported Files</h2>");
     this.setText(HEADER_ROW, FILE_TYPE, "File Type");
     this.setText(HEADER_ROW, STATUS, "Status");
     this.setText(HEADER_ROW, TIME_COMPLETED, "Time Completed");
@@ -62,18 +63,18 @@ public class ExportTable extends FlexTable {
         this.setText(i + STARTING_ROW, FILE_TYPE, e.getFileType().getDisplayText());
       }
       if (e.getTimeCompleted() != null) {
-        this.setText(i + STARTING_ROW, TIME_COMPLETED, e.getTimeCompleted().toString());
+        this.setText(i + STARTING_ROW, TIME_COMPLETED, gwtFormatDateTimeHuman(e.getTimeCompleted()));
       }
-      
+
       if (e.getStatus() != null) {
         this.setText(i + STARTING_ROW, STATUS, e.getStatus().toString());
         if (e.getResultFile() != null && e.getStatus() == ExportStatus.AVAILABLE) {
-          this.setWidget(i + STARTING_ROW, DOWNLOAD_FILE, new HTML(e.getResultFile()));
+          this.setWidget(i + STARTING_ROW, DOWNLOAD_FILE, new HTML(new SafeHtmlBuilder().appendHtmlConstant(e.getResultFile()).toSafeHtml()));
         }
       }
       this.setWidget(i + STARTING_ROW, DELETE, new DeleteExportButton(e));
     }
   }
 
-  
+
 }

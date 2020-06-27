@@ -16,7 +16,6 @@
 package org.opendatakit.aggregate.server;
 
 import javax.servlet.ServletContext;
-
 import org.opendatakit.common.persistence.Datastore;
 import org.opendatakit.common.persistence.exception.ODKEntityNotFoundException;
 import org.opendatakit.common.persistence.exception.ODKOverQuotaException;
@@ -29,8 +28,8 @@ import org.opendatakit.common.web.CallingContext;
  * start-up.
  *
  * @author mitchellsundt@gmail.com
- *
  */
+@SuppressWarnings("unused")
 public class SitePreferencesBean {
 
   private Datastore datastore;
@@ -113,6 +112,7 @@ public class SitePreferencesBean {
     this.userService = userService;
   }
 
+  @SuppressWarnings("unused")
   public synchronized String getSiteKey() throws ODKEntityNotFoundException, ODKOverQuotaException {
     if (siteKey == null) {
       siteKey = ServerPreferencesProperties.getSiteKey(ccHack);

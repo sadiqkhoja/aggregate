@@ -16,8 +16,10 @@
 
 package org.opendatakit.aggregate.client;
 
-import java.util.ArrayList;
+import static org.opendatakit.aggregate.client.LayoutUtils.buildVersionNote;
 
+import com.google.gwt.user.client.rpc.AsyncCallback;
+import java.util.ArrayList;
 import org.opendatakit.aggregate.client.form.FormSummary;
 import org.opendatakit.aggregate.client.preferences.Preferences;
 import org.opendatakit.aggregate.client.table.FormTable;
@@ -26,8 +28,6 @@ import org.opendatakit.aggregate.constants.common.FormConsts;
 import org.opendatakit.aggregate.constants.common.HelpSliderConsts;
 import org.opendatakit.aggregate.constants.common.UIConsts;
 import org.opendatakit.common.security.common.GrantedAuthorityName;
-
-import com.google.gwt.user.client.rpc.AsyncCallback;
 
 public class FormsSubTab extends AggregateSubTabBase {
   // button text & styling
@@ -60,6 +60,7 @@ public class FormsSubTab extends AggregateSubTabBase {
     // add tables to panels
     add(newForm);
     add(listOfForms);
+    add(buildVersionNote(this));
 
   }
 
@@ -78,17 +79,16 @@ public class FormsSubTab extends AggregateSubTabBase {
         public void onFailure(Throwable caught) {
           AggregateUI.getUI().reportError(caught);
         }
-  
+
         public void onSuccess(ArrayList<FormSummary> forms) {
           AggregateUI.getUI().clearError();
           boolean resizeFormTable = false;
           boolean newShowEnketoIntegration = Preferences.showEnketoIntegration();
-          if ( newShowEnketoIntegration != showEnketoIntegration ) {
+          if (newShowEnketoIntegration != showEnketoIntegration) {
             resizeFormTable = true;
             FormTable t = listOfForms;
-            @SuppressWarnings("unused")
             boolean success = true;
-            if ( t != null ) {
+            if (t != null) {
               listOfForms = null;
               success = remove(t);
             }
@@ -98,13 +98,13 @@ public class FormsSubTab extends AggregateSubTabBase {
             add(listOfForms);
           }
           listOfForms.updateFormTable(forms);
-          if ( resizeFormTable ) {
+          if (resizeFormTable) {
             // we need to force FormTable to be full width
             AggregateUI.resize();
           }
         }
       };
-  
+
       // Make the call to the form service.
       SecureGWT.getFormService().getForms(callback);
     }

@@ -22,11 +22,10 @@ package org.opendatakit.aggregate.constants;
  *
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- *
  */
 public final class ErrorConsts {
 
-  public static final String POSSIBLE_CORRUPTION = "Encountered an unknown problem while reading the database. This often is a sign of database corruption. Please get the server logs and file an issue at https://github.com/opendatakit/aggregate/issues";
+  public static final String POSSIBLE_CORRUPTION = "Encountered an unknown problem while reading the database. This often is a sign of database corruption. Please get the server logs and file an issue at https://github.com/getodk/aggregate/issues";
   /**
    * Error message if the form with FORM ID is not found
    */
@@ -59,7 +58,7 @@ public final class ErrorConsts {
   /**
    * Error message if form ID was not specified
    */
-  public static final String MISSING_FORM_ID = "Form did not specify a Form ID. For information on Form ID please check the Open Data Kit FAQ";
+  public static final String MISSING_FORM_ID = "Form did not specify a Form ID. For information on Form ID please check the ODK FAQ";
 
   /**
    * Error message if request is not multi-part
@@ -82,7 +81,7 @@ public final class ErrorConsts {
    */
   public static final String INSUFFIECENT_PARAMS = "Insuffiecent Parameters Received";
   public static final String SUBMISSION_NOT_FOUND =
-  "Did NOT find submission matching the provided parameters";
+      "Did NOT find submission matching the provided parameters";
   public static final String NO_STRING_TO_BLOB_CONVERT = "Blob cannot be created from string";
   public static final String UNKNOWN_INTERFACE = "Some how did not get a SubmissionField or SubmissionRepeat";
   public static final String INVALID_PARAMS = "Parameter(s) are not valid";
@@ -102,5 +101,4 @@ public final class ErrorConsts {
   public static final String EXPORTED_FILE_PROBLEM = "Problem accessing exported datafile";
 
   public static final String JAVA_ROSA_PARSING_PROBLEM = "Problem with JavaRosa Parsing Form:";
-  public static final String ERROR_OBTAINING_FUSION_TABLE_ID = "ERROR CREATING FUSION TABLE - DID NOT GET A TABLE NUMBER";
 }

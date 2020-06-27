@@ -24,14 +24,12 @@ import org.opendatakit.aggregate.constants.common.ExternalServicePublicationOpti
 import org.opendatakit.aggregate.constants.common.OperationalStatus;
 import org.opendatakit.aggregate.exception.ODKExternalServiceCredentialsException;
 import org.opendatakit.aggregate.exception.ODKExternalServiceException;
-import org.opendatakit.aggregate.exception.ODKIncompleteSubmissionData;
 import org.opendatakit.aggregate.externalservice.ExternalService;
 import org.opendatakit.aggregate.externalservice.ExternalServiceUtils;
 import org.opendatakit.aggregate.externalservice.FormServiceCursor;
 import org.opendatakit.aggregate.form.FormFactory;
 import org.opendatakit.aggregate.form.IForm;
 import org.opendatakit.aggregate.query.submission.QueryByDateRange;
-import org.opendatakit.aggregate.server.ServerPreferencesProperties;
 import org.opendatakit.aggregate.submission.Submission;
 import org.opendatakit.common.persistence.Datastore;
 import org.opendatakit.common.persistence.TaskLock;
@@ -81,6 +79,14 @@ public class UploadSubmissionsWorkerImpl {
   private IForm form;
   private long lastUpdateTimestamp = System.currentTimeMillis();
 
+  public UploadSubmissionsWorkerImpl(FormServiceCursor fsc, boolean useLargerBatchSize, CallingContext cc) {
+    this.formServiceCursor = fsc;
+    this.useLargerBatchSize = useLargerBatchSize;
+    this.cc = cc;
+    this.externalServicePublicationOption = fsc.getExternalServicePublicationOption();
+    this.lockId = UUID.randomUUID().toString();
+  }
+
   private int getQueryLimit() {
     if (useLargerBatchSize) {
       // we are running in the background...
@@ -88,14 +94,6 @@ public class UploadSubmissionsWorkerImpl {
     } else {
       return MAX_FOREGROUND_QUERY_LIMIT;
     }
-  }
-
-  public UploadSubmissionsWorkerImpl(FormServiceCursor fsc, boolean useLargerBatchSize, CallingContext cc) {
-    this.formServiceCursor = fsc;
-    this.useLargerBatchSize = useLargerBatchSize;
-    this.cc = cc;
-    this.externalServicePublicationOption = fsc.getExternalServicePublicationOption();
-    this.lockId = UUID.randomUUID().toString();
   }
 
   private String getUploadSubmissionsTaskLockName() {
@@ -135,12 +133,7 @@ public class UploadSubmissionsWorkerImpl {
     User user = cc.getCurrentUser();
     TaskLock taskLock = ds.createTaskLock(user);
 
-    try {
-      taskLock.obtainLock(lockId, getUploadSubmissionsTaskLockName(), TaskLockType.UPLOAD_SUBMISSION);
-    } catch (ODKTaskLockException e) {
-      logger.warn("Error while trying to obtain a task lock", e);
-      return;
-    }
+    taskLock.obtainLock(lockId, getUploadSubmissionsTaskLockName(), TaskLockType.UPLOAD_SUBMISSION);
 
     try {
       if (!formServiceCursor.isExternalServicePrepared()) {
@@ -211,15 +204,7 @@ public class UploadSubmissionsWorkerImpl {
     if (reQueue) {
       // create another task to continue upload
       UploadSubmissions uploadSubmissionsBean = (UploadSubmissions) cc.getBean(BeanDefs.UPLOAD_TASK_BEAN);
-      // schedule it on the background thread only if we are not disabling
-      // background activities and it started on the background thread.
-      boolean disableFasterProcessing = true;
-      try {
-        disableFasterProcessing = ServerPreferencesProperties.getFasterBackgroundActionsDisabled(cc);
-      } catch (ODKOverQuotaException e) {
-        logger.warn("Quota exceeded.", e);
-      }
-      uploadSubmissionsBean.createFormUploadTask(formServiceCursor, useLargerBatchSize && !disableFasterProcessing, cc);
+      uploadSubmissionsBean.createFormUploadTask(formServiceCursor, cc);
     }
   }
 
@@ -257,7 +242,7 @@ public class UploadSubmissionsWorkerImpl {
     return true;
   }
 
-  private boolean streamSubmissions() throws ODKIncompleteSubmissionData, ODKDatastoreException, ODKExternalServiceException {
+  private boolean streamSubmissions() throws ODKDatastoreException, ODKExternalServiceException {
 
     Date startDate = formServiceCursor.getLastStreamingCursorDate();
     if (startDate == null) {
@@ -335,7 +320,7 @@ public class UploadSubmissionsWorkerImpl {
     }
   }
 
-  private int renewTaskLock(int counter) throws ODKTaskLockException, ODKExternalServiceException {
+  private int renewTaskLock(int counter) throws ODKExternalServiceException {
     Datastore ds = cc.getDatastore();
     User user = cc.getCurrentUser();
 
@@ -359,13 +344,13 @@ public class UploadSubmissionsWorkerImpl {
     return counter;
   }
 
-  private List<Submission> querySubmissionsDateRange(Date startDate, Date endDate, String uriLast) throws ODKIncompleteSubmissionData, ODKDatastoreException {
+  private List<Submission> querySubmissionsDateRange(Date startDate, Date endDate, String uriLast) throws ODKDatastoreException {
     // query for next set of submissions
     QueryByDateRange query = new QueryByDateRange(form, getQueryLimit(), startDate, endDate, uriLast, cc);
     return query.getResultSubmissions(cc);
   }
 
-  private List<Submission> querySubmissionsStartDate(Date startDate, String uriLast) throws ODKIncompleteSubmissionData, ODKDatastoreException {
+  private List<Submission> querySubmissionsStartDate(Date startDate, String uriLast) throws ODKDatastoreException {
     // query for next set of submissions
     // (excluding the very recent submissions that haven't settled yet).
     QueryByDateRange query = new QueryByDateRange(form, getQueryLimit(), startDate, uriLast, cc);

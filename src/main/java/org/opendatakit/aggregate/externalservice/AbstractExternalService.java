@@ -1,17 +1,18 @@
-/**
- * Copyright (C) 2010 University of Washington
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
+/*
+  Copyright (C) 2010 University of Washington
+  <p>
+  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+  in compliance with the License. You may obtain a copy of the License at
+  <p>
+  http://www.apache.org/licenses/LICENSE-2.0
+  <p>
+  Unless required by applicable law or agreed to in writing, software distributed under the License
+  is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+  or implied. See the License for the specific language governing permissions and limitations under
+  the License.
  */
 package org.opendatakit.aggregate.externalservice;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -19,7 +20,6 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
@@ -66,53 +66,63 @@ import org.opendatakit.common.web.constants.HtmlConsts;
 
 
 /**
- *
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- *
  */
 public abstract class AbstractExternalService implements ExternalService {
 
+  // these do not take entity bodies...
+  protected static final String DELETE = "DELETE";
+  protected static final String GET = "GET";
+  // these do...
+  protected static final String POST = "POST";
+  protected static final String PUT = "PUT";
+  protected static final String PATCH = "PATCH";
+  // and also share all session cookies and credentials across all sessions...
+  // these are thread-safe, so this is OK.
+  protected static final CookieStore cookieStore = new BasicCookieStore();
+  protected static final CredentialsProvider credsProvider = new BasicCredentialsProvider();
+  protected static final int SERVICE_TIMEOUT_MILLISECONDS = 60000;
+  protected static final int SOCKET_ESTABLISHMENT_TIMEOUT_MILLISECONDS = 60000;
+  protected static final Charset UTF_CHARSET = Charset.forName(HtmlConsts.UTF8_ENCODE);
   private static final String NO_BATCH_FUNCTIONALITY_ERROR = "ERROR! External Service does NOT implement a BATCH function to upload multiple submissions - AbstractExternalService";
-
   /**
    * Datastore entity holding registration of an external service for a specific
    * form and the cursor position within that form that was last processed by
    * this service.
    */
   protected final FormServiceCursor fsc;
-
   protected final IForm form;
-
   protected final ElementFormatter formatter;
-
   protected final HeaderFormatter headerFormatter;
-
-  // these do not take entity bodies...
-  protected static final String DELETE = "DELETE";
-  protected static final String GET = "GET";
-
-  // these do...
-  protected static final String POST = "POST";
-  protected static final String PUT = "PUT";
-  protected static final String PATCH = "PATCH";
-
-  // and also share all session cookies and credentials across all sessions...
-  // these are thread-safe, so this is OK.
-  protected static final CookieStore cookieStore = new BasicCookieStore();
-  protected static final CredentialsProvider credsProvider = new BasicCredentialsProvider();
-
-  protected static final int SERVICE_TIMEOUT_MILLISECONDS = 60000;
-
-  protected static final int SOCKET_ESTABLISHMENT_TIMEOUT_MILLISECONDS = 60000;
-
-  protected static final Charset UTF_CHARSET = Charset.forName(HtmlConsts.UTF8_ENCODE);
 
   protected AbstractExternalService(IForm form, FormServiceCursor formServiceCursor, ElementFormatter formatter, HeaderFormatter headerFormatter, CallingContext cc) {
     this.form = form;
     this.formatter = formatter;
     this.headerFormatter = headerFormatter;
     this.fsc = formServiceCursor;
+  }
+
+  protected static FormServiceCursor createFormServiceCursor(IForm form, CommonFieldsBase entity, ExternalServicePublicationOption externalServiceOption, ExternalServiceType type, CallingContext cc) throws ODKDatastoreException {
+    FormServiceCursor formServiceCursor = FormServiceCursor.createFormServiceCursor(form, type, entity, cc);
+    formServiceCursor.setExternalServiceOption(externalServiceOption);
+    formServiceCursor.setIsExternalServicePrepared(false);
+    formServiceCursor.setOperationalStatus(OperationalStatus.ESTABLISHED);
+    formServiceCursor.setEstablishmentDateTime(new Date());
+    formServiceCursor.setUploadCompleted(false);
+    return formServiceCursor;
+  }
+
+  protected static final <T extends CommonFieldsBase> T newEntity(T parameterTableRelation, CallingContext cc) {
+    Datastore ds = cc.getDatastore();
+    User user = cc.getCurrentUser();
+    return ds.createEntityUsingRelation(parameterTableRelation, user);
+  }
+
+  protected static final <T extends CommonFieldsBase> T retrieveEntity(T parameterTableRelation, FormServiceCursor fsc, CallingContext cc) throws ODKDatastoreException {
+    Datastore ds = cc.getDatastore();
+    User user = cc.getCurrentUser();
+    return ds.getEntity(parameterTableRelation, fsc.getAuriService(), user);
   }
 
   protected abstract String getOwnership();
@@ -148,7 +158,6 @@ public abstract class AbstractExternalService implements ExternalService {
     User user = cc.getCurrentUser();
     ds.putEntity(fsc, user);
   }
-
 
   protected HttpResponse sendHttpRequest(String method, String url, HttpEntity entity, List<NameValuePair> qparams, CallingContext cc) throws
       IOException {
@@ -231,14 +240,6 @@ public abstract class AbstractExternalService implements ExternalService {
   }
 
   @Override
-  public void abandon(CallingContext cc) throws ODKDatastoreException {
-    if (fsc.getOperationalStatus() != OperationalStatus.COMPLETED) {
-      fsc.setOperationalStatus(OperationalStatus.ABANDONED);
-      persist(cc);
-    }
-  }
-
-  @Override
   public void delete(CallingContext cc) throws ODKDatastoreException {
     CommonFieldsBase serviceEntity = retrieveObjectEntity();
     List<? extends CommonFieldsBase> repeats = retrieveRepeatElementEntities();
@@ -294,9 +295,6 @@ public abstract class AbstractExternalService implements ExternalService {
         getDescriptiveTargetString());
   }
 
-  /**
-   * @see java.lang.Object#hashCode()
-   */
   @Override
   public int hashCode() {
     int hashCode = 13;
@@ -315,51 +313,8 @@ public abstract class AbstractExternalService implements ExternalService {
       UploadSubmissions uploadTask = (UploadSubmissions) cc.getBean(BeanDefs.UPLOAD_TASK_BEAN);
       CallingContext ccDaemon = ContextFactory.duplicateContext(cc);
       ccDaemon.setAsDaemon(true);
-      uploadTask.createFormUploadTask(fsc, true, ccDaemon);
+      uploadTask.createFormUploadTask(fsc, ccDaemon);
     }
-  }
-
-  /**
-   * Helper function for constructors.
-   *
-   */
-  protected static FormServiceCursor createFormServiceCursor(IForm form, CommonFieldsBase entity, ExternalServicePublicationOption externalServiceOption, ExternalServiceType type, CallingContext cc) throws ODKDatastoreException {
-    FormServiceCursor formServiceCursor = FormServiceCursor.createFormServiceCursor(form, type, entity, cc);
-    formServiceCursor.setExternalServiceOption(externalServiceOption);
-    formServiceCursor.setIsExternalServicePrepared(false);
-    formServiceCursor.setOperationalStatus(OperationalStatus.ESTABLISHED);
-    formServiceCursor.setEstablishmentDateTime(new Date());
-    formServiceCursor.setUploadCompleted(false);
-    return formServiceCursor;
-  }
-
-  /**
-   * Helper function for constructors.
-   *
-   * @param parameterTableRelation
-   * @param cc
-   * @return
-   * @throws ODKDatastoreException
-   */
-  protected static final <T extends CommonFieldsBase> T newEntity(T parameterTableRelation, CallingContext cc) throws ODKDatastoreException {
-    Datastore ds = cc.getDatastore();
-    User user = cc.getCurrentUser();
-    return ds.createEntityUsingRelation(parameterTableRelation, user);
-  }
-
-  /**
-   * Helper function for constructors.
-   *
-   * @param parameterTableRelation
-   * @param fsc
-   * @param cc
-   * @return
-   * @throws ODKDatastoreException
-   */
-  protected static final <T extends CommonFieldsBase> T retrieveEntity(T parameterTableRelation, FormServiceCursor fsc, CallingContext cc) throws ODKDatastoreException {
-    Datastore ds = cc.getDatastore();
-    User user = cc.getCurrentUser();
-    return ds.getEntity(parameterTableRelation, fsc.getAuriService(), user);
   }
 
 }

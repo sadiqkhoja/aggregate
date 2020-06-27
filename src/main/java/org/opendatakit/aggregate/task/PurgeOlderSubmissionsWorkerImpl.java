@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2011 University of Washington
+ * Copyright (C) 2018 Nafundi
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -15,22 +16,18 @@
  */
 package org.opendatakit.aggregate.task;
 
+import static org.opendatakit.aggregate.task.PurgeOlderSubmissions.*;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.opendatakit.aggregate.client.filter.FilterGroup;
 import org.opendatakit.aggregate.constants.TaskLockType;
 import org.opendatakit.aggregate.constants.common.FormActionStatus;
 import org.opendatakit.aggregate.constants.common.UIConsts;
 import org.opendatakit.aggregate.datamodel.TopLevelDynamicBase;
-import org.opendatakit.aggregate.exception.ODKExternalServiceDependencyException;
-import org.opendatakit.aggregate.exception.ODKFormNotFoundException;
-import org.opendatakit.aggregate.exception.ODKIncompleteSubmissionData;
 import org.opendatakit.aggregate.form.IForm;
 import org.opendatakit.aggregate.form.MiscTasks;
 import org.opendatakit.aggregate.process.DeleteSubmissions;
@@ -46,20 +43,16 @@ import org.opendatakit.common.persistence.exception.ODKEntityPersistException;
 import org.opendatakit.common.persistence.exception.ODKOverQuotaException;
 import org.opendatakit.common.persistence.exception.ODKTaskLockException;
 import org.opendatakit.common.security.User;
-import org.opendatakit.common.utils.WebUtils;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Common worker implementation for the purging of all of a form's submissions
  * older than a given date.
- * 
- * @author wbrunette@gmail.com
- * @author mitchellsundt@gmail.com
- * 
  */
 public class PurgeOlderSubmissionsWorkerImpl {
-
   private static final int MAX_QUERY_LIMIT = 100;
 
   private final IForm form;
@@ -67,16 +60,14 @@ public class PurgeOlderSubmissionsWorkerImpl {
   private final CallingContext cc;
   private final String pFormIdLockId;
 
-  public PurgeOlderSubmissionsWorkerImpl(IForm form, SubmissionKey miscTasksKey, long attemptCount,
-      CallingContext cc) {
+  public PurgeOlderSubmissionsWorkerImpl(IForm form, SubmissionKey miscTasksKey, long attemptCount, CallingContext cc) {
     this.form = form;
     this.miscTasksKey = miscTasksKey;
     this.cc = cc;
     pFormIdLockId = UUID.randomUUID().toString();
   }
 
-  public final void purgeOlderSubmissions() throws ODKDatastoreException, ODKFormNotFoundException,
-      ODKExternalServiceDependencyException {
+  public final void purgeOlderSubmissions() {
 
     Logger logger = LoggerFactory.getLogger(PurgeOlderSubmissionsWorkerImpl.class);
     logger.info("Beginning Submissions Purge: " + miscTasksKey.toString() + " form "
@@ -99,14 +90,10 @@ public class PurgeOlderSubmissionsWorkerImpl {
     TaskLock formIdTaskLock = ds.createTaskLock(user);
 
     boolean locked = false;
-    try {
-      if (formIdTaskLock.obtainLock(pFormIdLockId, lockedResourceName, TaskLockType.FORM_DELETION)) {
-        locked = true;
-      }
-      formIdTaskLock = null;
-    } catch (ODKTaskLockException e1) {
-      e1.printStackTrace();
+    if (formIdTaskLock.obtainLock(pFormIdLockId, lockedResourceName, TaskLockType.FORM_DELETION)) {
+      locked = true;
     }
+    formIdTaskLock = null;
 
     if (!locked) {
       return;
@@ -142,22 +129,20 @@ public class PurgeOlderSubmissionsWorkerImpl {
     }
   }
 
-  private List<TopLevelDynamicBase> querySubmissionsDateRange(Date startDate, Date endDate)
-      throws ODKFormNotFoundException, ODKIncompleteSubmissionData, ODKDatastoreException {
-    
+  private List<TopLevelDynamicBase> querySubmissionsDateRange(Date startDate, Date endDate) throws ODKDatastoreException {
+
     // fetch completed submissions, ascending.  Stop before the endDate.
     FilterGroup filterGroup = new FilterGroup(UIConsts.FILTER_NONE, form.getFormId(), null);
     filterGroup.setQueryFetchLimit(MAX_QUERY_LIMIT);
     QueryByUIFilterGroup query = new QueryByUIFilterGroup(form, filterGroup,
         CompletionFlag.ONLY_COMPLETE_SUBMISSIONS, cc);
     query.addFilterByPrimaryDate(FilterOperation.LESS_THAN, endDate);
-    
+
     // fetch the top-level entities for the submissions
     return query.getTopLevelSubmissionObjects(cc);
   }
 
-  private void doMarkAsComplete(MiscTasks t) throws ODKEntityPersistException,
-      ODKOverQuotaException {
+  private void doMarkAsComplete(MiscTasks t) throws ODKEntityPersistException, ODKOverQuotaException {
 
     Logger logger = LoggerFactory.getLogger(PurgeOlderSubmissionsWorkerImpl.class);
     logger.info("Submissions Purge: " + miscTasksKey.toString() + " form "
@@ -169,14 +154,6 @@ public class PurgeOlderSubmissionsWorkerImpl {
     t.persist(cc);
   }
 
-  /**
-   * we have gained a lock on the form. Now go through and try to delete all
-   * submissions older than the given date under this form.
-   * 
-   * @return true if form is fully deleted...
-   * @throws ODKDatastoreException
-   * @throws ODKTaskLockException
-   */
   private boolean doPurgeOlderSubmissions(MiscTasks t) throws Exception {
 
     CommonFieldsBase relation = null;
@@ -186,8 +163,8 @@ public class PurgeOlderSubmissionsWorkerImpl {
     Logger logger = LoggerFactory.getLogger(PurgeOlderSubmissionsWorkerImpl.class);
 
     Map<String, String> rp = t.getRequestParameters();
-    String purgeBeforeDateString = rp.get(PurgeOlderSubmissions.PURGE_DATE);
-    Date purgeBeforeDate = WebUtils.parsePurgeDateString(purgeBeforeDateString);
+    String purgeBeforeDateString = rp.get(PURGE_DATE);
+    Date purgeBeforeDate = parsePurgeDate(purgeBeforeDateString);
 
     logger.info("Submissions Purge: " + miscTasksKey.toString() + " form "
         + form.getFormId() + " doPurgeOlderSubmissions date: " + purgeBeforeDateString);
@@ -203,26 +180,26 @@ public class PurgeOlderSubmissionsWorkerImpl {
     }
 
     if (relation != null) {
-      
-      for (;;) {
+
+      for (; ; ) {
         // retrieve submissions
         // for large data sets, this might fail?
         Date startDate = BasicConsts.EPOCH;
         List<TopLevelDynamicBase> topLevelEntities = querySubmissionsDateRange(startDate, purgeBeforeDate);
-        
+
         logger.info("retrieved " + topLevelEntities.size() + " submissions.");
         if (topLevelEntities.size() == 0)
           break;
 
         List<SubmissionKey> keys = new ArrayList<SubmissionKey>();
-        for ( TopLevelDynamicBase tld : topLevelEntities ) {
+        for (TopLevelDynamicBase tld : topLevelEntities) {
           keys.add(new SubmissionKey(form.getFormId(), form.getTopLevelGroupElement().getElementName(), tld.getEntityKey().getKey()));
         }
 
         DeleteSubmissions delete;
         delete = new DeleteSubmissions(keys);
         delete.deleteSubmissions(cc);
-        
+
         logger.info("successfully deleted " + topLevelEntities.size() + " submissions");
         t.setLastActivityDate(new Date());
         t.persist(cc);

@@ -18,26 +18,19 @@ package org.opendatakit.aggregate.client.widgets;
 
 import com.google.gwt.event.logical.shared.ValueChangeEvent;
 import com.google.gwt.event.logical.shared.ValueChangeHandler;
+import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
 import com.google.gwt.user.client.ui.CheckBox;
 
 public class AggregateCheckBox extends CheckBox implements ValueChangeHandler<Boolean> {
-  
+
   private final AggregateBaseHandlers handlers;
-  
-  public AggregateCheckBox(String tooltipText) {
-    this(null, false, tooltipText, null);
-  }
-  
-  public AggregateCheckBox(String label, String tooltipText) {
-    this(label, false, tooltipText, null);
-  }
-  
+
   public AggregateCheckBox(String label, boolean labelIsHTML, String tooltipText, String helpBalloonText) {
     super();
-    
-    if(label != null) {
-      if(labelIsHTML) {
-        setHTML(label);
+
+    if (label != null) {
+      if (labelIsHTML) {
+        setHTML(new SafeHtmlBuilder().appendHtmlConstant(label).toSafeHtml());
       } else {
         setText(label);
       }
@@ -48,10 +41,10 @@ public class AggregateCheckBox extends CheckBox implements ValueChangeHandler<Bo
     addMouseOverHandler(handlers);
     addMouseOutHandler(handlers);
   }
-  
+
   @Override
   public void onValueChange(ValueChangeEvent<Boolean> event) {
     handlers.userAction();
   }
-  
+
 }

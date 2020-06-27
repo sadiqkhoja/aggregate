@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Google Inc. 
+ * Copyright (C) 2009 Google Inc.
  * Copyright (C) 2010 University of Washington.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
@@ -18,26 +18,20 @@
 package org.opendatakit.aggregate.constants.externalservice;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public enum JsonServerType {
-  STRING("string"), 
-  NUMBER("number"), 
-  GPS("gps"), 
+  STRING("string"),
+  NUMBER("number"),
+  GPS("gps"),
   CONTENT_TYPE("content_type"),
   DATE("date");
-  
+
   private String jsonServerType;
-  
+
   private JsonServerType(String value) {
     jsonServerType = value;
   }
 
-  public String getJsonServerTypeValue() {
-    return jsonServerType;
-  }
- 
 }

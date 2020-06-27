@@ -18,7 +18,6 @@ package org.opendatakit.aggregate.client.form;
 
 import java.io.Serializable;
 import java.util.Date;
-
 import org.opendatakit.aggregate.constants.common.ExportStatus;
 import org.opendatakit.aggregate.constants.common.ExportType;
 
@@ -27,71 +26,52 @@ public final class ExportSummary implements Serializable {
    * Serialization Version ID
    */
   private static final long serialVersionUID = -8309784116473729045L;
-  
+
   private String uri;
   private ExportType fileType;
-  private Date timeRequested;
   private ExportStatus status;
-  private Date timeLastAction;
   private Date timeCompleted;
   private String resultFile;
 
   public String getUri() {
     return uri;
   }
-  
+
+  public void setUri(String uri) {
+    this.uri = uri;
+  }
+
   public ExportType getFileType() {
     return fileType;
   }
 
-  public Date getTimeRequested() {
-    return timeRequested;
+  public void setFileType(ExportType fileType) {
+    this.fileType = fileType;
   }
 
   public ExportStatus getStatus() {
     return status;
   }
 
-  public Date getTimeLastAction() {
-    return timeLastAction;
+  public void setStatus(ExportStatus status) {
+    this.status = status;
   }
 
   public Date getTimeCompleted() {
     return timeCompleted;
   }
 
-  public String getResultFile() {
-    return resultFile;
-  }
-
-  public void setUri(String uri) {
-    this.uri = uri;
-  }
-  
-  public void setFileType(ExportType fileType) {
-    this.fileType = fileType;
-  }
-
-  public void setTimeRequested(Date timeRequested) {
-    this.timeRequested = timeRequested;
-  }
-
-  public void setStatus(ExportStatus status) {
-    this.status = status;
-  }
-
-  public void setTimeLastAction(Date timeLastAction) {
-    this.timeLastAction = timeLastAction;
-  }
-
   public void setTimeCompleted(Date timeCompleted) {
     this.timeCompleted = timeCompleted;
+  }
+
+  public String getResultFile() {
+    return resultFile;
   }
 
   public void setResultFile(String resultFile) {
     this.resultFile = resultFile;
   }
 
-  
-  
+
 }

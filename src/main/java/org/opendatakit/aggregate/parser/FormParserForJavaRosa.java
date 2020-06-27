@@ -29,9 +29,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.javarosa.core.model.instance.TreeElement;
 import org.opendatakit.aggregate.constants.ParserConsts;
 import org.opendatakit.aggregate.constants.ServletConsts;
@@ -60,10 +57,11 @@ import org.opendatakit.common.persistence.EntityKey;
 import org.opendatakit.common.persistence.PersistConsts;
 import org.opendatakit.common.persistence.TaskLock;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
-import org.opendatakit.common.persistence.exception.ODKEntityPersistException;
 import org.opendatakit.common.persistence.exception.ODKTaskLockException;
 import org.opendatakit.common.security.User;
 import org.opendatakit.common.web.CallingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Parses an XML definition of an XForm based on java rosa types
@@ -71,7 +69,6 @@ import org.opendatakit.common.web.CallingContext;
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
  * @author chrislrobert@gmail.com
- *
  */
 public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
 
@@ -82,34 +79,14 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
   // arbitrary limit on the table-creation process, to prevent infinite loops
   // that exhaust memory
   private static final int MAX_FORM_CREATION_ATTEMPTS = 100;
-
+  private final Map<FormDataModel, Integer> fieldLengths = new HashMap<FormDataModel, Integer>();
   private String fdmSubmissionUri;
   private int elementCount = 0;
   private int phantomCount = 0;
 
-  private final Map<FormDataModel, Integer> fieldLengths = new HashMap<FormDataModel, Integer>();
-
-  /**
-   * Constructor that parses and xform from the input stream supplied and
-   * creates the proper ODK Aggregate Form definition.
-   *
-   * @param formName
-   * @param formXmlData
-   * @param inputXml
-   * @param fileName
-   * @param uploadedFormItems
-   * @param warnings
-   *          -- the builder that will hold all the non-fatal form-creation
-   *          warnings
-   * @param cc
-   * @throws ODKFormAlreadyExistsException
-   * @throws ODKIncompleteSubmissionData
-   * @throws ODKDatastoreException
-   * @throws ODKParseException
-   */
   public FormParserForJavaRosa(String formName, MultiPartFormItem formXmlData, String inputXml,
-      String fileName, MultiPartFormData uploadedFormItems, StringBuilder warnings,
-      CallingContext cc) throws ODKFormAlreadyExistsException, ODKIncompleteSubmissionData,
+                               String fileName, MultiPartFormData uploadedFormItems, StringBuilder warnings,
+                               CallingContext cc) throws ODKFormAlreadyExistsException, ODKIncompleteSubmissionData,
       ODKDatastoreException, ODKParseException {
     super(inputXml, formName, false);
 
@@ -148,9 +125,13 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
     initHelper(uploadedFormItems, formXmlData, inputXml, persistenceStoreFormId, warnings, cc);
   }
 
-  enum AuxType {
-    NONE, BC_REF, REF_BLOB, GEO_LAT, GEO_LNG, GEO_ALT, GEO_ACC, LONG_STRING_REF, REF_TEXT
-  };
+  public static void updateFormXmlVersion(IForm thisForm, String incomingFormXml,
+                                          Long modelVersion, CallingContext cc) throws ODKDatastoreException {
+    String revisedXml = xmlWithTimestampComment(xmlWithoutTimestampComment(incomingFormXml),
+        cc.getServerURL());
+    // update the uiVersion and the form definition file...
+    thisForm.setFormXml(thisForm.getFormFilename(cc), revisedXml, modelVersion, cc);
+  }
 
   private String generatePhantomKey(String uriSubmissionFormModel) {
     return String.format("elem+%1$s(%2$08d-phantom:%3$08d)", uriSubmissionFormModel, elementCount,
@@ -170,7 +151,7 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
   }
 
   private void initHelper(MultiPartFormData uploadedFormItems, MultiPartFormItem xformXmlData,
-      String inputXml, String persistenceStoreFormId, StringBuilder warnings, CallingContext cc)
+                          String inputXml, String persistenceStoreFormId, StringBuilder warnings, CallingContext cc)
       throws ODKDatastoreException, ODKFormAlreadyExistsException, ODKParseException,
       ODKIncompleteSubmissionData {
 
@@ -219,16 +200,12 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
           // we remain in the loop even if we get kicked out.
         }
       }
-      try {
-        TaskLock formCreationTaskLock = ds.createTaskLock(user);
-        if (formCreationTaskLock.obtainLock(creationLockId, lockedResourceName,
-            TaskLockType.CREATE_FORM)) {
-          locked = true;
-        }
-        formCreationTaskLock = null;
-      } catch (ODKTaskLockException e) {
-        e.printStackTrace();
+      TaskLock formCreationTaskLock = ds.createTaskLock(user);
+      if (formCreationTaskLock.obtainLock(creationLockId, lockedResourceName,
+          TaskLockType.CREATE_FORM)) {
+        locked = true;
       }
+      formCreationTaskLock = null;
     }
 
     // we hold the lock while we create the form here...
@@ -258,30 +235,19 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
     }
   }
 
-  public static void updateFormXmlVersion(IForm thisForm, String incomingFormXml,
-      Long modelVersion, CallingContext cc) throws ODKDatastoreException {
-    String revisedXml = xmlWithTimestampComment(xmlWithoutTimestampComment(incomingFormXml),
-        cc.getServerURL());
-    // update the uiVersion and the form definition file...
-    thisForm.setFormXml(thisForm.getFormFilename(cc), revisedXml, modelVersion, cc);
-  }
-
   /**
    * Return the string by which we uniquely identify a table in the datastore.
    * This is the schema name concatenated with the table name. Used during table
    * creation to track the mapping from datastore tables to CommonFieldsBase
    * objects.
-   *
-   * @param tbl
-   * @return
    */
   private String tableKey(CommonFieldsBase tbl) {
     return tbl.getSchemaName() + "." + tbl.getTableName();
   }
 
   private void guardedInitHelper(MultiPartFormData uploadedFormItems,
-      MultiPartFormItem xformXmlData, String incomingFormXml, String persistenceStoreFormId,
-      StringBuilder warnings, CallingContext cc) throws ODKDatastoreException,
+                                 MultiPartFormItem xformXmlData, String incomingFormXml, String persistenceStoreFormId,
+                                 StringBuilder warnings, CallingContext cc) throws ODKDatastoreException,
       ODKFormAlreadyExistsException, ODKParseException, ODKIncompleteSubmissionData {
     // ///////////////
     // Step 1: create or fetch the Form (FormInfo) submission
@@ -298,7 +264,6 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
     /* true if we are modifying this form definition. */
     boolean updateForm;
     /* true if the form definition changes, but is compatible */
-    @SuppressWarnings("unused")
     boolean differentForm = false;
     IForm formInfo = null;
     /*
@@ -569,7 +534,7 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
       FormDefinition fd = null;
       try {
         int nAttempts = 0;
-        for (;;) {
+        for (; ; ) {
           // place a limit on this process
           if (++nAttempts > MAX_FORM_CREATION_ATTEMPTS) {
             log.error("Aborting form-creation due to fail-safe limit ("
@@ -716,7 +681,7 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
           }
 
           // scorched earth -- get all the tables and try to drop them all...
-          if ( fd != null ) {
+          if (fd != null) {
             for (CommonFieldsBase tbl : fd.getBackingTableSet()) {
               try {
                 ds.dropRelation(tbl, user);
@@ -783,14 +748,9 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
   /**
    * The creation of the tbl relation has failed. We need to split it into
    * multiple sub-tables and try again.
-   *
-   * @param fdmList
-   * @param fdmRelation
-   * @param tbl
-   * @param newPhantomTableName
    */
   private void orderlyDivideTable(List<FormDataModel> fdmList, FormDataModel fdmRelation,
-      CommonFieldsBase tbl, NamingSet opaque, CallingContext cc) {
+                                  CommonFieldsBase tbl, NamingSet opaque, CallingContext cc) {
 
     log.info("Attempting to divide " + tbl.getTableName());
     // Find out how many columns it has...
@@ -866,7 +826,7 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
     // raw elements.
     List<FormDataModel> topElementChange = new ArrayList<FormDataModel>();
     List<FormDataModel> groups = new ArrayList<FormDataModel>();
-    for (;;) {
+    for (; ; ) {
       for (FormDataModel m : tblContentParents) {
         // geopoints, phantoms and groups don't have backing keys
         if (m.getBackingKey() != null) {
@@ -1154,7 +1114,7 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
   }
 
   private void recursivelyReassignChildren(FormDataModel biggest, CommonFieldsBase tbl,
-      String newPhantomTableName) {
+                                           String newPhantomTableName) {
 
     if (!tbl.equals(biggest.getBackingObjectPrototype()))
       return;
@@ -1170,26 +1130,11 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
   /**
    * Used to recursively process the xform definition tree to create the form
    * data model.
-   *
-   * @param treeElement
-   *          java rosa tree element
-   *
-   * @param parentKey
-   *          key from the parent form for proper entity group usage in gae
-   *
-   * @param parent
-   *          parent form element
-   *
-   * @throws ODKEntityPersistException
-   * @throws ODKParseException
-   *
    */
-
   private void constructDataModel(final NamingSet opaque, final EntityKey k,
-      final List<FormDataModel> dmList, final FormDataModel fdm, String parent, int ordinal,
-      String tablePrefix, String nrGroupPrefix, String tableName, TreeElement treeElement,
-      StringBuilder warnings, CallingContext cc) throws ODKEntityPersistException,
-      ODKParseException {
+                                  final List<FormDataModel> dmList, final FormDataModel fdm, String parent, int ordinal,
+                                  String tablePrefix, String nrGroupPrefix, String tableName, TreeElement treeElement,
+                                  StringBuilder warnings, CallingContext cc) {
 
     // for debugging: printTreeElementInfo(treeElement);
 
@@ -1202,143 +1147,149 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
     String persistAsColumn = originalPersistAsColumn;
 
     switch (treeElement.getDataType()) {
-    case org.javarosa.core.model.Constants.DATATYPE_TEXT:
-      /**
-       * Text question type.
-       */
-      et = FormDataModel.ElementType.STRING;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_INTEGER:
-      /**
-       * Numeric question type. These are numbers without decimal points
-       */
-      et = FormDataModel.ElementType.INTEGER;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_DECIMAL:
-      /**
-       * Decimal question type. These are numbers with decimals
-       */
-      et = FormDataModel.ElementType.DECIMAL;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_DATE:
-      /**
-       * Date question type. This has only date component without time.
-       */
-      et = FormDataModel.ElementType.JRDATE;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_TIME:
-      /**
-       * Time question type. This has only time element without date
-       */
-      et = FormDataModel.ElementType.JRTIME;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_DATE_TIME:
-      /**
-       * Date and Time question type. This has both the date and time components
-       */
-      et = FormDataModel.ElementType.JRDATETIME;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_CHOICE:
-      /**
-       * This is a question with alist of options where not more than one option
-       * can be selected at a time.
-       */
-      et = FormDataModel.ElementType.STRING;
-      // et = FormDataModel.ElementType.SELECT1;
-      // persistAsColumn = null;
-      // persistAsTable = opaque.getTableName(fdm.getSchemaName(),
-      // tablePrefix, nrGroupPrefix, treeElement.getName());
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_CHOICE_LIST:
-      /**
-       * This is a question with alist of options where more than one option can
-       * be selected at a time.
-       */
-      et = FormDataModel.ElementType.SELECTN;
-      opaque.removeColumnName(persistAsTable, persistAsColumn);
-      persistAsColumn = null;
-      persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
-          treeElement.getName());
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_BOOLEAN:
-      /**
-       * Question with true and false answers.
-       */
-      et = FormDataModel.ElementType.BOOLEAN;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_GEOPOINT:
-      /**
-       * Question with location answer.
-       */
-      et = FormDataModel.ElementType.GEOPOINT;
-      opaque.removeColumnName(persistAsTable, persistAsColumn);
-      persistAsColumn = null; // structured field
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_GEOTRACE:
-      /**
-       * Question with location trace.
-       */
-      et = FormDataModel.ElementType.GEOTRACE;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_GEOSHAPE:
-      /**
-       * Question with location trace.
-       */
-      et = FormDataModel.ElementType.GEOSHAPE;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_BARCODE:
-      /**
-       * Question with barcode string answer.
-       */
-      et = FormDataModel.ElementType.STRING;
-      break;
-    case org.javarosa.core.model.Constants.DATATYPE_BINARY:
-      /**
-       * Question with external binary answer.
-       */
-      et = FormDataModel.ElementType.BINARY;
-      opaque.removeColumnName(persistAsTable, persistAsColumn);
-      persistAsColumn = null;
-      persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
-          treeElement.getName() + "_BN");
-      break;
-
-    case org.javarosa.core.model.Constants.DATATYPE_NULL: /*
-                                                           * for nodes that have
-                                                           * no data, or data
-                                                           * type otherwise
-                                                           * unknown
-                                                           */
-      if (treeElement.isRepeatable()) {
-        // repeatable group...
+      case org.javarosa.core.model.Constants.DATATYPE_TEXT:
+        /*
+          Text question type.
+         */
+        et = FormDataModel.ElementType.STRING;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_INTEGER:
+        /*
+          Numeric question type. These are numbers without decimal points
+         */
+        et = FormDataModel.ElementType.INTEGER;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_DECIMAL:
+        /*
+          Decimal question type. These are numbers with decimals
+         */
+        et = FormDataModel.ElementType.DECIMAL;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_DATE:
+        /*
+          Date question type. This has only date component without time.
+         */
+        et = FormDataModel.ElementType.JRDATE;
+        opaque.removeColumnName(persistAsTable, persistAsColumn);
+        persistAsColumn = null; // structured field
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_TIME:
+        /*
+          Time question type. This has only time element without date
+         */
+        et = FormDataModel.ElementType.JRTIME;
+        opaque.removeColumnName(persistAsTable, persistAsColumn);
+        persistAsColumn = null; // structured field
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_DATE_TIME:
+        /*
+          Date and Time question type. This has both the date and time components
+         */
+        et = FormDataModel.ElementType.JRDATETIME;
+        opaque.removeColumnName(persistAsTable, persistAsColumn);
+        persistAsColumn = null; // structured field
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_CHOICE:
+        /*
+          This is a question with alist of options where not more than one option
+          can be selected at a time.
+         */
+        et = FormDataModel.ElementType.STRING;
+        // et = FormDataModel.ElementType.SELECT1;
+        // persistAsColumn = null;
+        // persistAsTable = opaque.getTableName(fdm.getSchemaName(),
+        // tablePrefix, nrGroupPrefix, treeElement.getName());
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_CHOICE_LIST:
+        /*
+          This is a question with alist of options where more than one option can
+          be selected at a time.
+         */
+        et = FormDataModel.ElementType.SELECTN;
         opaque.removeColumnName(persistAsTable, persistAsColumn);
         persistAsColumn = null;
-        et = FormDataModel.ElementType.REPEAT;
         persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
             treeElement.getName());
-      } else if (treeElement.getNumChildren() == 0 && dmList.size() != 0) {
-        // assume fields that don't have children are string fields.
-        // but exclude the top-level group, as somebody might define an
-        // empty
-        // form.
-        // the developer likely has not set a type for the field.
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_BOOLEAN:
+        /*
+          Question with true and false answers.
+         */
+        et = FormDataModel.ElementType.BOOLEAN;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_GEOPOINT:
+        /*
+          Question with location answer.
+         */
+        et = FormDataModel.ElementType.GEOPOINT;
+        opaque.removeColumnName(persistAsTable, persistAsColumn);
+        persistAsColumn = null; // structured field
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_GEOTRACE:
+        /*
+          Question with location trace.
+         */
+        et = FormDataModel.ElementType.GEOTRACE;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_GEOSHAPE:
+        /*
+          Question with location trace.
+         */
+        et = FormDataModel.ElementType.GEOSHAPE;
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_BARCODE:
+        /*
+          Question with barcode string answer.
+         */
         et = FormDataModel.ElementType.STRING;
-        log.warn("Element " + getTreeElementPath(treeElement) + " does not have a type");
-        warnings.append("<tr><td>");
-        warnings.append(getTreeElementPath(treeElement));
-        warnings.append("</td></tr>");
-      } else {
-        /* one or more children -- this is a non-repeating group */
+        break;
+      case org.javarosa.core.model.Constants.DATATYPE_BINARY:
+        /*
+          Question with external binary answer.
+         */
+        et = FormDataModel.ElementType.BINARY;
         opaque.removeColumnName(persistAsTable, persistAsColumn);
         persistAsColumn = null;
-        et = FormDataModel.ElementType.GROUP;
-      }
-      break;
+        persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
+            treeElement.getName() + "_BN");
+        break;
 
-    default:
-    case org.javarosa.core.model.Constants.DATATYPE_UNSUPPORTED:
-      et = FormDataModel.ElementType.STRING;
-      break;
+      case org.javarosa.core.model.Constants.DATATYPE_NULL: /*
+       * for nodes that have
+       * no data, or data
+       * type otherwise
+       * unknown
+       */
+        if (treeElement.isRepeatable()) {
+          // repeatable group...
+          opaque.removeColumnName(persistAsTable, persistAsColumn);
+          persistAsColumn = null;
+          et = FormDataModel.ElementType.REPEAT;
+          persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
+              treeElement.getName());
+        } else if (treeElement.getNumChildren() == 0 && dmList.size() != 0) {
+          // assume fields that don't have children are string fields.
+          // but exclude the top-level group, as somebody might define an
+          // empty
+          // form.
+          // the developer likely has not set a type for the field.
+          et = FormDataModel.ElementType.STRING;
+          log.warn("Element " + getTreeElementPath(treeElement) + " does not have a type");
+          warnings.append("<tr><td>");
+          warnings.append(getTreeElementPath(treeElement));
+          warnings.append("</td></tr>");
+        } else {
+          /* one or more children -- this is a non-repeating group */
+          opaque.removeColumnName(persistAsTable, persistAsColumn);
+          persistAsColumn = null;
+          et = FormDataModel.ElementType.GROUP;
+        }
+        break;
+
+      default:
+      case org.javarosa.core.model.Constants.DATATYPE_UNSUPPORTED:
+        et = FormDataModel.ElementType.STRING;
+        break;
     }
 
     Datastore ds = cc.getDatastore();
@@ -1359,195 +1310,292 @@ public class FormParserForJavaRosa extends BaseFormParserForJavaRosa {
 
     // and patch up the tree elements that have multiple fields...
     switch (et) {
-    case BINARY_CONTENT_REF_BLOB:
-    case BOOLEAN:
-    case DECIMAL:
-    case INTEGER:
-    case JRDATE:
-    case JRDATETIME:
-    case JRTIME:
-    case PHANTOM:
-    case REF_BLOB:
-    case SELECT1:
-    case SELECTN:
-      // This case keeps lint messages down...
-      break;
-    case GEOTRACE:
-    case GEOSHAPE:
-    case STRING:
-      // track the preferred string lengths of the string fields
-      Integer len = getNodesetStringLength(treeElement);
-      if (len != null) {
-        fieldLengths.put(d, len);
-      }
-      break;
-    case BINARY:
-      // binary elements have two additional tables associated with them
-      // -- the _REF and _BLB tables (in addition to _BIN above).
-      persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
-          treeElement.getName() + "_REF");
-
-      // record for VersionedBinaryContentRefBlob..
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.BC_REF);
-      dmList.add(d);
-      final String bcbURI = d.getUri();
-      d.setOrdinalNumber(1L);
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(groupURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.BINARY_CONTENT_REF_BLOB);
-      d.setPersistAsColumn(null);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-
-      persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
-          treeElement.getName() + "_BLB");
-
-      // record for RefBlob...
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.REF_BLOB);
-      dmList.add(d);
-      d.setOrdinalNumber(1L);
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(bcbURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.REF_BLOB);
-      d.setPersistAsColumn(null);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-      break;
-
-    case GEOPOINT:
-      // geopoints are stored as 4 fields (_LAT, _LNG, _ALT, _ACC) in the
-      // persistence layer.
-      // the geopoint attribute itself has no column, but is a placeholder
-      // within
-      // the data model for the expansion set of these 4 fields.
-
-      persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
-          + "_LAT");
-
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_LAT);
-      dmList.add(d);
-      d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_LATITUDE_ORDINAL_NUMBER));
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(groupURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.DECIMAL);
-      d.setPersistAsColumn(persistAsColumn);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-
-      persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
-          + "_LNG");
-
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_LNG);
-      dmList.add(d);
-      d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_LONGITUDE_ORDINAL_NUMBER));
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(groupURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.DECIMAL);
-      d.setPersistAsColumn(persistAsColumn);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-
-      persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
-          + "_ALT");
-
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_ALT);
-      dmList.add(d);
-      d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_ALTITUDE_ORDINAL_NUMBER));
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(groupURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.DECIMAL);
-      d.setPersistAsColumn(persistAsColumn);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-
-      persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
-          + "_ACC");
-
-      d = ds.createEntityUsingRelation(fdm, user);
-      setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_ACC);
-      dmList.add(d);
-      d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_ACCURACY_ORDINAL_NUMBER));
-      d.setUriSubmissionDataModel(k.getKey());
-      d.setParentUriFormDataModel(groupURI);
-      d.setElementName(treeElement.getName());
-      d.setElementType(FormDataModel.ElementType.DECIMAL);
-      d.setPersistAsColumn(persistAsColumn);
-      d.setPersistAsTable(persistAsTable);
-      d.setPersistAsSchema(fdm.getSchemaName());
-      break;
-
-    case GROUP:
-      // non-repeating group - this modifies the group prefix,
-      // and all children are emitted.
-      if (!parent.equals(k.getKey())) {
-        // incorporate the group name only if it isn't the top-level
-        // group.
-        if (nrGroupPrefix.length() == 0) {
-          nrGroupPrefix = treeElement.getName();
-        } else {
-          nrGroupPrefix = nrGroupPrefix + "_" + treeElement.getName();
+      case BINARY_CONTENT_REF_BLOB:
+      case BOOLEAN:
+      case DECIMAL:
+      case INTEGER:
+      case PHANTOM:
+      case REF_BLOB:
+      case SELECT1:
+      case SELECTN:
+        // This case keeps lint messages down...
+        break;
+      case GEOTRACE:
+      case GEOSHAPE:
+      case STRING:
+        // track the preferred string lengths of the string fields
+        Integer len = getNodesetStringLength(treeElement);
+        if (len != null) {
+          fieldLengths.put(d, len);
         }
-      }
-      // OK -- group with at least one element -- assume no value...
-      // TreeElement list has the begin and end tags for the nested
-      // groups.
-      // Swallow the end tag by looking to see if the prior and current
-      // field names are the same.
-      TreeElement prior = null;
-      int trueOrdinal = 0;
-      for (int i = 0; i < treeElement.getNumChildren(); ++i) {
-        TreeElement current = (TreeElement) treeElement.getChildAt(i);
-        // TODO: make this pay attention to namespace of the tag...
-        if ((prior != null) && (prior.getName().equals(current.getName()))) {
-          // it is the end-group tag... seems to happen with two
-          // adjacent repeat
-          // groups
-          log.info("repeating tag at " + i + " skipping " + current.getName());
-          prior = current;
-        } else {
-          constructDataModel(opaque, k, dmList, fdm, groupURI, ++trueOrdinal, tablePrefix,
-              nrGroupPrefix, persistAsTable, current, warnings, cc);
-          prior = current;
-        }
-      }
-      break;
+        break;
+      case BINARY:
+        // binary elements have two additional tables associated with them
+        // -- the _REF and _BLB tables (in addition to _BIN above).
+        persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
+            treeElement.getName() + "_REF");
 
-    case REPEAT:
-      // repeating group - clears group prefix
-      // and all children are emitted.
-      // TreeElement list has the begin and end tags for the nested
-      // groups.
-      // Swallow the end tag by looking to see if the prior and current
-      // field names are the same.
-      prior = null;
-      trueOrdinal = 0;
-      for (int i = 0; i < treeElement.getNumChildren(); ++i) {
-        TreeElement current = (TreeElement) treeElement.getChildAt(i);
-        // TODO: make this pay attention to namespace of the tag...
-        if ((prior != null) && (prior.getName().equals(current.getName()))) {
-          // it is the end-group tag... seems to happen with two
-          // adjacent repeat
-          // groups
-          log.info("repeating tag at " + i + " skipping " + current.getName());
-          prior = current;
-        } else {
-          constructDataModel(opaque, k, dmList, fdm, groupURI, ++trueOrdinal, tablePrefix, "",
-              persistAsTable, current, warnings, cc);
-          prior = current;
+        // record for VersionedBinaryContentRefBlob..
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.BC_REF);
+        dmList.add(d);
+        final String bcbURI = d.getUri();
+        d.setOrdinalNumber(1L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.BINARY_CONTENT_REF_BLOB);
+        d.setPersistAsColumn(null);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsTable = opaque.getTableName(fdm.getSchemaName(), tablePrefix, nrGroupPrefix,
+            treeElement.getName() + "_BLB");
+
+        // record for RefBlob...
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.REF_BLOB);
+        dmList.add(d);
+        d.setOrdinalNumber(1L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(bcbURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.REF_BLOB);
+        d.setPersistAsColumn(null);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+        break;
+
+      case JRDATE:
+        // dates require an extra field to store incoming data in its raw format (_RAW)
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName());
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_PARSED);
+        dmList.add(d);
+        d.setOrdinalNumber(1L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.JRDATE);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName() + "_RAW");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_RAW);
+        dmList.add(d);
+        d.setOrdinalNumber(2L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.STRING);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        break;
+
+      case JRTIME:
+        // times require an extra field to store incoming data in its raw format (_RAW)
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName());
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_PARSED);
+        dmList.add(d);
+        d.setOrdinalNumber(1L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.JRTIME);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName() + "_RAW");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_RAW);
+        dmList.add(d);
+        d.setOrdinalNumber(2L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.STRING);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        break;
+
+      case JRDATETIME:
+        // dateTimes require an extra field to store incoming data in its raw format (_RAW)
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName());
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_PARSED);
+        dmList.add(d);
+        d.setOrdinalNumber(1L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.JRDATETIME);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName() + "_RAW");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.TEMPORAL_RAW);
+        dmList.add(d);
+        d.setOrdinalNumber(2L);
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.STRING);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        break;
+
+      case GEOPOINT:
+        // geopoints are stored as 4 fields (_LAT, _LNG, _ALT, _ACC) in the
+        // persistence layer.
+        // the geopoint attribute itself has no column, but is a placeholder
+        // within
+        // the data model for the expansion set of these 4 fields.
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
+            + "_LAT");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_LAT);
+        dmList.add(d);
+        d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_LATITUDE_ORDINAL_NUMBER));
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.DECIMAL);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
+            + "_LNG");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_LNG);
+        dmList.add(d);
+        d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_LONGITUDE_ORDINAL_NUMBER));
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.DECIMAL);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
+            + "_ALT");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_ALT);
+        dmList.add(d);
+        d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_ALTITUDE_ORDINAL_NUMBER));
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.DECIMAL);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+
+        persistAsColumn = opaque.getColumnName(persistAsTable, nrGroupPrefix, treeElement.getName()
+            + "_ACC");
+
+        d = ds.createEntityUsingRelation(fdm, user);
+        setPrimaryKey(d, fdmSubmissionUri, AuxType.GEO_ACC);
+        dmList.add(d);
+        d.setOrdinalNumber(Long.valueOf(GeoPointConsts.GEOPOINT_ACCURACY_ORDINAL_NUMBER));
+        d.setUriSubmissionDataModel(k.getKey());
+        d.setParentUriFormDataModel(groupURI);
+        d.setElementName(treeElement.getName());
+        d.setElementType(FormDataModel.ElementType.DECIMAL);
+        d.setPersistAsColumn(persistAsColumn);
+        d.setPersistAsTable(persistAsTable);
+        d.setPersistAsSchema(fdm.getSchemaName());
+        break;
+
+      case GROUP:
+        // non-repeating group - this modifies the group prefix,
+        // and all children are emitted.
+        if (!parent.equals(k.getKey())) {
+          // incorporate the group name only if it isn't the top-level
+          // group.
+          if (nrGroupPrefix.length() == 0) {
+            nrGroupPrefix = treeElement.getName();
+          } else {
+            nrGroupPrefix = nrGroupPrefix + "_" + treeElement.getName();
+          }
         }
-      }
-      break;
+        // OK -- group with at least one element -- assume no value...
+        // TreeElement list has the begin and end tags for the nested
+        // groups.
+        // Swallow the end tag by looking to see if the prior and current
+        // field names are the same.
+        TreeElement prior = null;
+        int trueOrdinal = 0;
+        for (int i = 0; i < treeElement.getNumChildren(); ++i) {
+          TreeElement current = (TreeElement) treeElement.getChildAt(i);
+          // TODO: make this pay attention to namespace of the tag...
+          if ((prior != null) && (prior.getName().equals(current.getName()))) {
+            // it is the end-group tag... seems to happen with two
+            // adjacent repeat
+            // groups
+            log.info("repeating tag at " + i + " skipping " + current.getName());
+            prior = current;
+          } else {
+            constructDataModel(opaque, k, dmList, fdm, groupURI, ++trueOrdinal, tablePrefix,
+                nrGroupPrefix, persistAsTable, current, warnings, cc);
+            prior = current;
+          }
+        }
+        break;
+
+      case REPEAT:
+        // repeating group - clears group prefix
+        // and all children are emitted.
+        // TreeElement list has the begin and end tags for the nested
+        // groups.
+        // Swallow the end tag by looking to see if the prior and current
+        // field names are the same.
+        prior = null;
+        trueOrdinal = 0;
+        for (int i = 0; i < treeElement.getNumChildren(); ++i) {
+          TreeElement current = (TreeElement) treeElement.getChildAt(i);
+          // TODO: make this pay attention to namespace of the tag...
+          if ((prior != null) && (prior.getName().equals(current.getName()))) {
+            // it is the end-group tag... seems to happen with two
+            // adjacent repeat
+            // groups
+            log.info("repeating tag at " + i + " skipping " + current.getName());
+            prior = current;
+          } else {
+            constructDataModel(opaque, k, dmList, fdm, groupURI, ++trueOrdinal, tablePrefix, "",
+                persistAsTable, current, warnings, cc);
+            prior = current;
+          }
+        }
+        break;
     }
+  }
+
+  enum AuxType {
+    NONE, BC_REF, REF_BLOB, GEO_LAT, GEO_LNG, GEO_ALT, GEO_ACC, LONG_STRING_REF, REF_TEXT, TEMPORAL_PARSED, TEMPORAL_RAW
   }
 
 }

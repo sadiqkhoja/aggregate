@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2009 Google Inc.
  * Copyright (C) 2010 University of Washington.
+ * Copyright (C) 2018 Nafundi
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -17,8 +18,16 @@
 
 package org.opendatakit.aggregate.parser;
 
+import static java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+import static org.opendatakit.aggregate.constants.ParserConsts.FORM_ID_ATTRIBUTE_NAME;
+import static org.opendatakit.aggregate.constants.ParserConsts.FORWARD_SLASH;
+import static org.opendatakit.aggregate.constants.ParserConsts.FORWARD_SLASH_SUBSTITUTION;
+import static org.opendatakit.aggregate.constants.ParserConsts.NAMESPACE_ODK;
+import static org.opendatakit.aggregate.submission.type.jr.JRTemporalUtils.parseDate;
+
 import java.io.IOException;
 import java.io.StringReader;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,11 +35,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Optional;
 import org.javarosa.core.model.CoreModelModule;
-import org.javarosa.core.model.DataBinding;
 import org.javarosa.core.model.FormDef;
 import org.javarosa.core.model.IDataReference;
 import org.javarosa.core.model.SubmissionProfile;
@@ -42,89 +48,38 @@ import org.javarosa.core.services.PrototypeManager;
 import org.javarosa.core.util.JavaRosaCoreModule;
 import org.javarosa.model.xform.XFormsModule;
 import org.javarosa.xform.parse.XFormParser;
-import org.javarosa.xform.util.XFormUtils;
+import org.kxml2.io.KXmlParser;
 import org.kxml2.kdom.Document;
 import org.kxml2.kdom.Element;
-import org.opendatakit.aggregate.constants.ParserConsts;
+import org.kxml2.kdom.Node;
 import org.opendatakit.aggregate.exception.ODKIncompleteSubmissionData;
 import org.opendatakit.aggregate.exception.ODKIncompleteSubmissionData.Reason;
 import org.opendatakit.aggregate.form.XFormParameters;
-import org.opendatakit.common.utils.WebUtils;
 import org.opendatakit.common.web.constants.BasicConsts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
-/**
- * Parses an XML definition of an XForm based on java rosa types
- *
- * @author wbrunette@gmail.com
- * @author mitchellsundt@gmail.com
- * @author chrislrobert@gmail.com
- *
- */
 public class BaseFormParserForJavaRosa {
 
   private static final String LEADING_QUESTION_XML_PATTERN = "^[^<]*<\\s*\\?\\s*xml.*";
   private static final Logger log = LoggerFactory.getLogger(BaseFormParserForJavaRosa.class.getName());
-
-  private static boolean isJavaRosaInitialized = false;
-  /**
-   * The JR implementation here does not look thread-safe or
-   * like something to be invoked more than once.
-   * Moving it within a critical section and a do-once guard.
-   */
-  private static void initializeJavaRosa() {
-    synchronized (log) {
-      if (!isJavaRosaInitialized) {
-        // Register prototypes for classes that FormDef uses
-        PrototypeManager.registerPrototypes(JavaRosaCoreModule.classNames);
-        PrototypeManager.registerPrototypes(CoreModelModule.classNames);
-        new XFormsModule().registerModule();
-        isJavaRosaInitialized = true;
-      }
-    }
-  }
-
   private static final String BASE64_ENCRYPTED_FIELD_KEY = "base64EncryptedFieldKey";
   private static final String BASE64_RSA_PUBLIC_KEY = "base64RsaPublicKey";
-
-  // result from comparing two XForms
-  public static enum DifferenceResult {
-    XFORMS_IDENTICAL, // instance and body are identical
-    XFORMS_SHARE_INSTANCE, // instances (including binding) identical; body
-                           // differs
-    XFORMS_SHARE_SCHEMA, // instances differ, but share common database schema
-    XFORMS_DIFFERENT, // instances differ significantly enough to affect
-                      // database schema
-    XFORMS_MISSING_VERSION, XFORMS_EARLIER_VERSION
-  }
-
   // bind attributes that CAN change without affecting database structure
   // Note: must specify these entirely in lowercase
   private static final List<String> ChangeableBindAttributes;
-
   // core instance def. attrs. that CANNOT change w/o affecting db structure
   // Note: must specify these entirely in lowercase
   private static final List<String> NonchangeableInstanceAttributes;
-
-  static {
-    ChangeableBindAttributes = Arrays.asList(new String[]{
-        "relevant", "constraint", "readonly", "required", "calculate",
-        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":constraintmsg",
-        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":preload",
-        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":preloadparams", 
-        "appearance" });
-    
-    NonchangeableInstanceAttributes = Arrays.asList(new String[]{"id"});
-  }
-  
   // nodeset attribute name, in <bind> elements
   private static final String NODESET_ATTR = "nodeset";
-
   // type attribute name, in <bind> elements
   private static final String TYPE_ATTR = "type";
-
   private static final String ENCRYPTED_FORM_DEFINITION = "<?xml version=\"1.0\"?>"
       + "<h:html xmlns=\"http://www.w3.org/2002/xforms\" xmlns:h=\"http://www.w3.org/1999/xhtml\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:odk=\""
-      + ParserConsts.NAMESPACE_ODK
+      + NAMESPACE_ODK
       + "\" xmlns:jr=\"http://openrosa.org/javarosa\">"
       + "<h:head>"
       + "<h:title>Encrypted Form</h:title>"
@@ -158,122 +113,18 @@ public class BaseFormParserForJavaRosa {
       + "<upload ref=\"encryptedXmlFile\" mediatype=\"image/*\"><label>submission</label></upload>"
       + "<input ref=\"base64EncryptedElementSignature\"><label>Encrypted Element Signature</label></input>"
       + "</h:body>" + "</h:html>";
-
   private static final String ODK_TIMESTAMP_COMMENT = "<!-- ODK Aggregate upload time: ";
+  private static boolean isJavaRosaInitialized = false;
 
-  private static int xmlInsertLocation(String xml) {
-    int idx = xml.indexOf(">");
-    if (idx == -1)
-      return -1;
-    String snip = xml.substring(0, idx).toLowerCase();
-    if (snip.matches(LEADING_QUESTION_XML_PATTERN)) {
-      // the file started with a <?xml...?> tag -- get the next(<html>) tag.
-      idx = xml.indexOf(">", idx + 1); // <html
-      if (idx == -1)
-        return -1;
-    }
-    idx = xml.indexOf(">", idx + 1);
-    if (idx == -1)
-      return -1;
-    ++idx;
-    return idx;
-  }
+  static {
+    ChangeableBindAttributes = Arrays.asList(new String[]{
+        "relevant", "constraint", "readonly", "required", "calculate",
+        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":constraintmsg",
+        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":preload",
+        XFormParser.NAMESPACE_JAVAROSA.toLowerCase() + ":preloadparams",
+        "appearance"});
 
-  public static String xmlWithoutTimestampComment(String xml) {
-    int idx = xmlInsertLocation(xml);
-
-    if (xml.startsWith(ODK_TIMESTAMP_COMMENT, idx)) {
-      int endIdx = xml.indexOf(">", idx);
-      if (endIdx == -1)
-        return xml;
-      ++endIdx;
-      return xml.substring(0, idx) + xml.substring(endIdx);
-    } else {
-      return xml;
-    }
-  }
-
-  public static Date xmlTimestamp(String xml) {
-    int idx = xmlInsertLocation(xml);
-
-    if (xml.startsWith(ODK_TIMESTAMP_COMMENT, idx)) {
-      // find space after the IS8601 timestamp
-      int endIdx = xml.indexOf(" ", idx + ODK_TIMESTAMP_COMMENT.length());
-      if (endIdx == -1)
-        return new Date();
-      ++endIdx;
-      String timestamp = xml.substring(idx + ODK_TIMESTAMP_COMMENT.length(), endIdx);
-      Date d = WebUtils.parseDate(timestamp);
-      if (d != null) {
-        return d;
-      } else {
-        return new Date();
-      }
-    } else {
-      return new Date();
-    }
-  }
-
-  public static String xmlWithTimestampComment(String xmlWithoutTimestampComment, String serverUrl) {
-    int idx = xmlInsertLocation(xmlWithoutTimestampComment);
-
-    return xmlWithoutTimestampComment.substring(0, idx) + ODK_TIMESTAMP_COMMENT
-        + WebUtils.iso8601Date(new Date()) + " on " + serverUrl + " -->"
-        + xmlWithoutTimestampComment.substring(idx);
-  }
-
-  private static class XFormParserWithBindEnhancements extends XFormParser {
-    @SuppressWarnings("unused")
-    private Document xmldoc;
-    private BaseFormParserForJavaRosa parser;
-
-    public XFormParserWithBindEnhancements(BaseFormParserForJavaRosa parser, Document form) {
-      super(form);
-      this.xmldoc = form;
-      this.parser = parser;
-    }
-
-    protected void parseBind(Element e) {
-      // remember raw bindings in case we want to compare parsed XForms later
-      parser.bindElements.add(copyBindingElement(e));
-      List<String> usedAtts = new ArrayList<String>();
-
-      DataBinding binding = processStandardBindAttributes(usedAtts, e);
-
-      String value = e.getAttributeValue(ParserConsts.NAMESPACE_ODK, "length");
-      if (value != null) {
-        e.setAttribute(ParserConsts.NAMESPACE_ODK, "length", null);
-      }
-
-      log.info("Calling handle found value " + ((value == null) ? "null" : value));
-
-      if (value != null) {
-        Integer iValue = Integer.valueOf(value);
-        parser.setNodesetStringLength(e.getAttributeValue(null, "nodeset"), iValue);
-      }
-
-      // print unused attribute warning message for parent element
-      if (XFormUtils.showUnusedAttributeWarning(e, usedAtts)) {
-        System.out.println(XFormUtils.unusedAttWarning(e, usedAtts));
-      }
-
-      addBinding(binding);
-    }
-  }
-
-  private static synchronized final XFormParserWithBindEnhancements parseFormDefinition(String xml,
-      BaseFormParserForJavaRosa parser) throws ODKIncompleteSubmissionData {
-
-    StringReader isr = null;
-    try {
-      isr = new StringReader(xml);
-      Document doc = XFormParser.getXMLDocument(isr);
-      return new XFormParserWithBindEnhancements(parser, doc);
-    } catch (Exception e) {
-      throw new ODKIncompleteSubmissionData(e, Reason.BAD_JR_PARSE);
-    } finally {
-      isr.close();
-    }
+    NonchangeableInstanceAttributes = Arrays.asList(new String[]{"id"});
   }
 
   /**
@@ -291,160 +142,19 @@ public class BaseFormParserForJavaRosa {
   protected final String title;
   protected final boolean isFieldEncryptedForm;
   protected final String base64EncryptedFieldRsaPublicKey;
-
   /**
    * The XForm definition in XML
    */
   protected final String xml;
-
   // extracted from XForm during parsing
   private final Map<String, Integer> stringLengths = new HashMap<String, Integer>();
   // original bindings from parse-time for later comparison
   private final List<Element> bindElements = new ArrayList<Element>();
 
-  private void setNodesetStringLength(String nodeset, Integer length) {
-    stringLengths.put(nodeset, length);
-  }
-
-  protected Integer getNodesetStringLength(AbstractTreeElement<?> e) {
-    List<String> path = new ArrayList<String>();
-    while (e != null && e.getName() != null) {
-      path.add(e.getName());
-      e = e.getParent();
-    }
-    Collections.reverse(path);
-
-    StringBuilder b = new StringBuilder();
-    for (String s : path) {
-      b.append("/");
-      b.append(s);
-    }
-
-    String nodeset = b.toString();
-    Integer len = stringLengths.get(nodeset);
-    return len;
-  }
-
-  /**
-   * Extract the form id, version and uiVersion.
-   *
-   * @param rootElement
-   *          - the tree element that is the root submission.
-   * @param defaultFormIdValue
-   *          - used if no "id" attribute found. This should already be
-   *          slash-substituted.
-   * @return
-   */
-  private XFormParameters extractFormParameters(TreeElement rootElement, String defaultFormIdValue) {
-
-    String formIdValue = null;
-    String versionString = rootElement.getAttributeValue(null, "version");
-
-    // search for the "id" attribute
-    for (int i = 0; i < rootElement.getAttributeCount(); i++) {
-      String name = rootElement.getAttributeName(i);
-      if (name.equals(ParserConsts.FORM_ID_ATTRIBUTE_NAME)) {
-        formIdValue = rootElement.getAttributeValue(i);
-        formIdValue = formIdValue.replaceAll(ParserConsts.FORWARD_SLASH,
-            ParserConsts.FORWARD_SLASH_SUBSTITUTION);
-        break;
-      }
-    }
-
-    return new XFormParameters((formIdValue == null) ? defaultFormIdValue : formIdValue,
-        versionString);
-  }
-
-  /**
-   * Determine whether or not a field is encrypted. Field-level encryption
-   * plumbing.
-   *
-   * @param element
-   * @return
-   */
-  public final static boolean isEncryptedField(TreeElement element) {
-    String v = getBindAttribute(element, "encrypted");
-    return (v != null && ("true".equalsIgnoreCase(v) || "true()".equalsIgnoreCase(v)));
-  }
-
-  /**
-   * Field-level encryption requires an extended Javarosa library that expose an
-   * "encrypted" bind attribute that identifies the fields that are to be
-   * encrypted and a BASE64_RSA_PUBLIC_KEY bind attribute on the
-   * BASE64_ENCRYPTED_FIELD_KEY field in the form.
-   *
-   * Requires an experimental custom Javarosa library.
-   *
-   * Not enabled in the main tree.
-   *
-   * @param element
-   * @param name
-   * @return
-   */
-  private final static String getBindAttribute(TreeElement element, String name) {
-    return null;
-    // TODO: uncomment this if the experimental library is used...
-    // return element.getBindAttributeValue(null, name);
-  }
-
-  /**
-   * Traverse the submission looking for the first matching tag in depth-first
-   * order.
-   *
-   * @param parent
-   * @param name
-   * @return
-   */
-  private TreeElement findDepthFirst(TreeElement parent, String name) {
-    int len = parent.getNumChildren();
-    for (int i = 0; i < len; ++i) {
-      TreeElement e = parent.getChildAt(i);
-      if (name.equals(e.getName())) {
-        return e;
-      } else if (e.getNumChildren() != 0) {
-        TreeElement v = findDepthFirst(e, name);
-        if (v != null)
-          return v;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Field-level encryption support. Forms with field-level encryption must have
-   * a meta block with a BASE64_ENCRYPTED_FIELD_KEY entry.
-   *
-   * @return base64EncryptedFieldRsaPublicKey string if field encryption is
-   *         present.
-   */
-  private String extractBase64FieldEncryptionKey(TreeElement submissionElement) {
-    TreeElement meta = findDepthFirst(submissionElement, "meta");
-    if (meta != null) {
-      List<TreeElement> l;
-
-      // Save the base64 RSA-Encrypted symmetric encryption key
-      // we are using for field encryption.
-      // Do not encrypt the form if we can't save this encrypted key...
-      l = meta.getChildrenWithName(BASE64_ENCRYPTED_FIELD_KEY);
-      if (l.size() == 1) {
-        TreeElement ek = l.get(0);
-        String base64EncryptedFieldRsaPublicKey = getBindAttribute(ek, BASE64_RSA_PUBLIC_KEY);
-        if (base64EncryptedFieldRsaPublicKey != null
-            && base64EncryptedFieldRsaPublicKey.trim().length() == 0) {
-          base64EncryptedFieldRsaPublicKey = null;
-        }
-        return base64EncryptedFieldRsaPublicKey;
-      }
-    }
-    return null;
-  }
-
   /**
    * Alternate constructor for internally comparing whether two form definitions
    * share the same data elements and storage models. This just parses the
    * supplied xml and does nothing else.
-   *
-   * @throws ODKIncompleteSubmissionData
    */
   protected BaseFormParserForJavaRosa(String existingXml, String existingTitle, boolean allowLegacy)
       throws ODKIncompleteSubmissionData {
@@ -456,14 +166,17 @@ public class BaseFormParserForJavaRosa {
 
     initializeJavaRosa();
 
-    XFormParserWithBindEnhancements xfp = parseFormDefinition(xml, this);
-    try {
-      rootJavaRosaFormDef = xfp.parse();
-    } catch (Exception e) {
-      throw new ODKIncompleteSubmissionData(
-          "Javarosa failed to construct a FormDef. Is this an XForm definition?", e,
-          Reason.BAD_JR_PARSE);
-    }
+    Document doc = parseXmlToDocument(xml);
+
+    List<Element> allBindings = getBindings(doc);
+
+    bindElements.clear();
+    allBindings.forEach(this::storeCopyOfBinding);
+
+    stringLengths.clear();
+    allBindings.forEach(this::storeLengthOfBinding);
+
+    rootJavaRosaFormDef = parseDocumentIntoFormDef(doc);
 
     if (rootJavaRosaFormDef == null) {
       throw new ODKIncompleteSubmissionData(
@@ -485,18 +198,18 @@ public class BaseFormParserForJavaRosa {
       if (idx != -1) {
         if (schemaValue.indexOf("/") < idx) {
           // malformed...
-          schemaValue = allowLegacy ? schemaValue.replaceAll(ParserConsts.FORWARD_SLASH,
-              ParserConsts.FORWARD_SLASH_SUBSTITUTION) : null;
+          schemaValue = allowLegacy ? schemaValue.replaceAll(FORWARD_SLASH,
+              FORWARD_SLASH_SUBSTITUTION) : null;
           schemaMalformed = true;
         } else {
           // need to escape all slashes... for xpath processing...
-          schemaValue = schemaValue.replaceAll(ParserConsts.FORWARD_SLASH,
-              ParserConsts.FORWARD_SLASH_SUBSTITUTION);
+          schemaValue = schemaValue.replaceAll(FORWARD_SLASH,
+              FORWARD_SLASH_SUBSTITUTION);
         }
       } else {
         // malformed...
-        schemaValue = allowLegacy ? schemaValue.replaceAll(ParserConsts.FORWARD_SLASH,
-            ParserConsts.FORWARD_SLASH_SUBSTITUTION) : null;
+        schemaValue = allowLegacy ? schemaValue.replaceAll(FORWARD_SLASH,
+            FORWARD_SLASH_SUBSTITUTION) : null;
         schemaMalformed = true;
       }
     }
@@ -548,7 +261,7 @@ public class BaseFormParserForJavaRosa {
     if (p != null) {
       String altUrl = p.getAction();
       isNotUploadableForm = (altUrl == null || !altUrl.startsWith("http") || p.getMethod() == null || !p
-          .getMethod().equals("form-data-post"));
+          .getMethod().equals("form-data-post") || !p.getMethod().equalsIgnoreCase("post"));
     }
 
     this.isNotUploadableForm = isNotUploadableForm;
@@ -556,7 +269,7 @@ public class BaseFormParserForJavaRosa {
     if (isNotUploadableForm) {
       log.info("Form "
           + submissionElementDefn.formId
-          + " is not uploadable (submission method is not form-data-post or does not have an http: or https: url. ");
+          + " is not uploadable (submission method is not post or form-data-post, or does not have an http: or https: url. ");
     }
 
     // insist that the submission element and root element have the same
@@ -588,10 +301,26 @@ public class BaseFormParserForJavaRosa {
       isFieldEncryptedForm = (base64EncryptedFieldRsaPublicKey != null);
     } else {
       isFileEncryptedForm = true;
-      // encrypted -- use the encrypted form template (above) to define
-      // the
-      // storage for this form.
-      XFormParserWithBindEnhancements exfp = parseFormDefinition(ENCRYPTED_FORM_DEFINITION, this);
+      // When a form is encrypted, we don't use the actual form that the users sends
+      // because the submissions we will get for this form will only have three fields:
+      // - base64EncryptedKey
+      // - base64EncryptedElementSignature
+      // - encryptedXmlFile
+      //
+      // To address this, we will use the form defined in ENCRYPTED_FORM_DEFINITION instead
+      // which follows the structure described above.
+      // This is discussed in https://github.com/getodk/aggregate/issues/294
+      XFormParser exfp = parseFormDefinition(ENCRYPTED_FORM_DEFINITION);
+      // Reset bind element and string length maps since we won't be using the original
+      // form parsed and processed at the beginning of this constructor.
+      Document encryptedFormDoc = parseXmlToDocument(ENCRYPTED_FORM_DEFINITION);
+      List<Element> encryptedFormBindings = getBindings(encryptedFormDoc);
+
+      bindElements.clear();
+      encryptedFormBindings.forEach(this::storeCopyOfBinding);
+
+      stringLengths.clear();
+      encryptedFormBindings.forEach(this::storeLengthOfBinding);
       try {
         formDef = exfp.parse();
       } catch (IOException e) {
@@ -625,62 +354,180 @@ public class BaseFormParserForJavaRosa {
     title = formTitle.replace(BasicConsts.FORWARDSLASH, BasicConsts.EMPTY_STRING);
   }
 
-  @SuppressWarnings("unused")
-  private void printTreeElementInfo(TreeElement treeElement) {
-    System.out.println("processing te: " + treeElement.getName() + " type: " + treeElement.getDataType()
-        + " repeatable: " + treeElement.isRepeatable());
+  /**
+   * The JR implementation here does not look thread-safe or
+   * like something to be invoked more than once.
+   * Moving it within a critical section and a do-once guard.
+   */
+  private static void initializeJavaRosa() {
+    synchronized (log) {
+      if (!isJavaRosaInitialized) {
+        // Register prototypes for classes that FormDef uses
+        PrototypeManager.registerPrototypes(JavaRosaCoreModule.classNames);
+        PrototypeManager.registerPrototypes(CoreModelModule.classNames);
+        new XFormsModule().registerModule();
+        isJavaRosaInitialized = true;
+      }
+    }
   }
 
-  public String getTreeElementPath(AbstractTreeElement<?> e) {
-    if (e == null)
-      return null;
-    String s = getTreeElementPath(e.getParent());
-    if (s == null)
-      return e.getName();
-    return s + "/" + e.getName();
+  private static int xmlInsertLocation(String xml) {
+    int idx = xml.indexOf(">");
+    if (idx == -1)
+      return -1;
+    String snip = xml.substring(0, idx).toLowerCase();
+    if (snip.matches(LEADING_QUESTION_XML_PATTERN)) {
+      // the file started with a <?xml...?> tag -- get the next(<html>) tag.
+      idx = xml.indexOf(">", idx + 1); // <html
+      if (idx == -1)
+        return -1;
+    }
+    idx = xml.indexOf(">", idx + 1);
+    if (idx == -1)
+      return -1;
+    ++idx;
+    return idx;
+  }
+
+  public static String xmlWithoutTimestampComment(String xml) {
+    int idx = xmlInsertLocation(xml);
+
+    if (xml.startsWith(ODK_TIMESTAMP_COMMENT, idx)) {
+      int endIdx = xml.indexOf(">", idx);
+      if (endIdx == -1)
+        return xml;
+      ++endIdx;
+      return xml.substring(0, idx) + xml.substring(endIdx);
+    } else {
+      return xml;
+    }
+  }
+
+  public static Date xmlTimestamp(String xml) {
+    int idx = xmlInsertLocation(xml);
+
+    if (xml.startsWith(ODK_TIMESTAMP_COMMENT, idx)) {
+      // find space after the IS8601 timestamp
+      int endIdx = xml.indexOf(" ", idx + ODK_TIMESTAMP_COMMENT.length());
+      if (endIdx == -1)
+        return new Date();
+      ++endIdx;
+      String timestamp = xml.substring(idx + ODK_TIMESTAMP_COMMENT.length(), endIdx);
+      Date d = parseDate(timestamp);
+      if (d != null) {
+        return d;
+      } else {
+        return new Date();
+      }
+    } else {
+      return new Date();
+    }
+  }
+
+  public static String xmlWithTimestampComment(String xmlWithoutTimestampComment, String serverUrl) {
+    int idx = xmlInsertLocation(xmlWithoutTimestampComment);
+
+    return xmlWithoutTimestampComment.substring(0, idx) + ODK_TIMESTAMP_COMMENT
+        + OffsetDateTime.now().format(ISO_OFFSET_DATE_TIME) + " on " + serverUrl + " -->"
+        + xmlWithoutTimestampComment.substring(idx);
+  }
+
+  private static synchronized XFormParser parseFormDefinition(String xml) throws ODKIncompleteSubmissionData {
+    try (StringReader isr = new StringReader(xml)) {
+      Document doc = XFormParser.getXMLDocument(isr);
+      return new XFormParser(doc);
+    } catch (Exception e) {
+      throw new ODKIncompleteSubmissionData(e, Reason.BAD_JR_PARSE);
+    }
   }
 
   /**
-   * Get all recorded bindings for a given TreeElement
-   *
-   * @param treeElement
-   * @return
+   * Field-level encryption requires an extended Javarosa library that expose an
+   * "encrypted" bind attribute that identifies the fields that are to be
+   * encrypted and a BASE64_RSA_PUBLIC_KEY bind attribute on the
+   * BASE64_ENCRYPTED_FIELD_KEY field in the form.
+   * <p>
+   * Requires an experimental custom Javarosa library.
+   * <p>
+   * Not enabled in the main tree.
    */
-  private List<Element> getBindingsForTreeElement(TreeElement treeElement) {
-    List<Element> l = new ArrayList<Element>();
-    String nodeset = "/" + getTreeElementPath(treeElement);
-
-    for (int i = 0; i < this.bindElements.size(); i++) {
-      Element element = this.bindElements.get(i);
-      if (element.getAttributeValue("", NODESET_ATTR).equalsIgnoreCase(nodeset)) {
-        l.add(element);
-      }
-    }
-
-    return (l);
+  private final static String getBindAttribute(TreeElement element, String name) {
+    return null;
+    // TODO: uncomment this if the experimental library is used...
+    // return element.getBindAttributeValue(null, name);
   }
 
-  public String getFormId() {
-    return rootElementDefn.formId;
+  private static FormDef parseDocumentIntoFormDef(Document doc) throws ODKIncompleteSubmissionData {
+    try {
+      return new XFormParser(doc).parse();
+    } catch (Exception e) {
+      throw new ODKIncompleteSubmissionData(
+          "Javarosa failed to construct a FormDef. Is this an XForm definition?", e,
+          Reason.BAD_JR_PARSE);
+    }
+  }
+
+  private static List<Element> getBindings(Document doc) throws ODKIncompleteSubmissionData {
+    Element head = getChild(doc.getRootElement(), "head");
+    Element model = getChild(head, "model");
+    return getChildren(model, "bind");
+  }
+
+  private static Document parseXmlToDocument(String xml) throws ODKIncompleteSubmissionData {
+    try (StringReader isr = new StringReader(xml)) {
+      Document doc = new Document();
+      KXmlParser parser = new KXmlParser();
+      parser.setInput(isr);
+      parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true);
+      doc.parse(parser);
+      return doc;
+    } catch (IOException | XmlPullParserException e) {
+      throw new ODKIncompleteSubmissionData(
+          "Javarosa failed to parse the XForm definition. Is this an XForm definition?", e,
+          Reason.BAD_JR_PARSE);
+    }
+  }
+
+  private static List<Element> getChildren(Element element, String name) {
+    List<Element> selectedChildren = new ArrayList<>();
+    for (int i = 0, max = element.getChildCount(); i < max; i++)
+      if (element.getType(i) == Node.ELEMENT) {
+        Element child = (Element) element.getChild(i);
+        if (getCleanName(child).equals(name))
+          selectedChildren.add(child);
+      }
+    return selectedChildren;
+  }
+
+  private static Element getChild(Element element, String name) throws ODKIncompleteSubmissionData {
+    for (int i = 0, max = element.getChildCount(); i < max; i++)
+      if (element.getType(i) == Node.ELEMENT) {
+        Element child = (Element) element.getChild(i);
+        if (getCleanName(child).equals(name))
+          return child;
+      }
+    throw new ODKIncompleteSubmissionData("Missing " + name + " child element in " + element.getName(), Reason.BAD_JR_PARSE);
+  }
+
+  private static String getCleanName(Element child) {
+    String name = child.getName();
+    return name.contains(":") ? name.substring(name.indexOf(":") + 1) : name;
   }
 
   /**
    * Compare two XML files to assess their level of structural difference (if
    * any).
    *
-   * @param incomingParser
-   *          -- parsed version of incoming form
-   * @param existingXml
-   *          -- the existing Xml for this form
+   * @param incomingParser -- parsed version of incoming form
+   * @param existingXml    -- the existing Xml for this form
    * @return XFORMS_SHARE_INSTANCE when bodies differ but instances and bindings
-   *         are identical; XFORMS_SHARE_SCHEMA when bodies and/or bindings
-   *         differ, but database structure remains unchanged; XFORMS_DIFFERENT
-   *         when forms are different enough to affect database structure and/or
-   *         encryption.
-   * @throws ODKIncompleteSubmissionData
+   *     are identical; XFORMS_SHARE_SCHEMA when bodies and/or bindings
+   *     differ, but database structure remains unchanged; XFORMS_DIFFERENT
+   *     when forms are different enough to affect database structure and/or
+   *     encryption.
    */
   public static DifferenceResult compareXml(BaseFormParserForJavaRosa incomingParser,
-      String existingXml, String existingTitle, boolean isWithinUpdateWindow)
+                                            String existingXml, String existingTitle, boolean isWithinUpdateWindow)
       throws ODKIncompleteSubmissionData {
     if (incomingParser == null || existingXml == null) {
       throw new ODKIncompleteSubmissionData(Reason.MISSING_XML);
@@ -716,7 +563,7 @@ public class BaseFormParserForJavaRosa {
     String evs = existingParser.rootElementDefn.versionString;
     boolean modelVersionSame = (incomingParser.rootElementDefn.modelVersion == null) ? (existingParser.rootElementDefn.modelVersion == null)
         : incomingParser.rootElementDefn.modelVersion
-            .equals(existingParser.rootElementDefn.modelVersion);
+        .equals(existingParser.rootElementDefn.modelVersion);
 
     boolean isEarlierVersion = false;
     if (!(evs == null || (modelVersionSame && ivs.length() > evs.length()) || (!modelVersionSame && ivs
@@ -835,16 +682,14 @@ public class BaseFormParserForJavaRosa {
    * Compare two parsed TreeElements to assess their level of structural
    * difference (if any).
    *
-   * @param treeElement1
-   * @param treeElement2
    * @return XFORMS_SHARE_INSTANCE when bodies differ but instances and bindings
-   *         are identical; XFORMS_SHARE_SCHEMA when bodies and/or bindings
-   *         differ, but database structure remains unchanged; XFORMS_DIFFERENT
-   *         when forms are different enough to affect database structure and/or
-   *         encryption.
+   *     are identical; XFORMS_SHARE_SCHEMA when bodies and/or bindings
+   *     differ, but database structure remains unchanged; XFORMS_DIFFERENT
+   *     when forms are different enough to affect database structure and/or
+   *     encryption.
    */
   public static DifferenceResult compareTreeElements(TreeElement treeElement1,
-      BaseFormParserForJavaRosa parser1, TreeElement treeElement2, BaseFormParserForJavaRosa parser2) {
+                                                     BaseFormParserForJavaRosa parser1, TreeElement treeElement2, BaseFormParserForJavaRosa parser2) {
     boolean smalldiff = false, bigdiff = false;
 
     // compare names
@@ -925,8 +770,8 @@ public class BaseFormParserForJavaRosa {
                 && value1 != null
                 && value2 != null
                 && ((value1.toLowerCase().equals("string") && value2.toLowerCase()
-                    .equals("select1")) || (value1.toLowerCase().equals("select1") && value2
-                    .toLowerCase().equals("string")))) {
+                .equals("select1")) || (value1.toLowerCase().equals("select1") && value2
+                .toLowerCase().equals("string")))) {
               // handle changes between string and select1 data types as special
               // (allowable) case
               smalldiff = true;
@@ -981,7 +826,6 @@ public class BaseFormParserForJavaRosa {
     // Otherwise, if you have specified the jr:template attribute,
     // it appears only as an INDEX_TEMPLATE element.
 
-    @SuppressWarnings("unused")
     int template1DropCount = 0;
     // get non-template entries for treeElement1
     List<TreeElement> element1ExcludingRepeatIndex0Children = new ArrayList<TreeElement>();
@@ -999,7 +843,6 @@ public class BaseFormParserForJavaRosa {
       element1ExcludingRepeatIndex0Children.add(child);
     }
 
-    @SuppressWarnings("unused")
     int template2DropCount = 0;
     // get non-template entries for treeElement2
     Map<String, TreeElement> element2ExcludingRepeatIndex0Children = new HashMap<String, TreeElement>();
@@ -1036,15 +879,15 @@ public class BaseFormParserForJavaRosa {
         if (childElement2 != null) {
           // recursively compare children...
           switch (compareTreeElements(childElement1, parser1, childElement2, parser2)) {
-          case XFORMS_SHARE_SCHEMA:
-            smalldiff = true;
-            break;
-          case XFORMS_DIFFERENT:
-            bigdiff = true;
-            break;
-          default:
-            // no update for the other cases (IDENTICAL, EARLIER, MISSING, SHARE_INSTANCE)
-            break;
+            case XFORMS_SHARE_SCHEMA:
+              smalldiff = true;
+              break;
+            case XFORMS_DIFFERENT:
+              bigdiff = true;
+              break;
+            default:
+              // no update for the other cases (IDENTICAL, EARLIER, MISSING, SHARE_INSTANCE)
+              break;
           }
         } else {
           // consider children not found as big differences
@@ -1066,7 +909,7 @@ public class BaseFormParserForJavaRosa {
   // search list of recorded bindings for a particular attribute; return its
   // value
   private static String getBindingAttributeValue(List<Element> bindings,
-      String attributeNamespace, String attributeName) {
+                                                 String attributeNamespace, String attributeName) {
     String retval = null;
 
     for (int i = 0; i < bindings.size(); i++) {
@@ -1078,15 +921,135 @@ public class BaseFormParserForJavaRosa {
     return (retval);
   }
 
-  // copy binding and associated attributes to a new binding element (to help
-  // with maintaining list of original bindings)
-  private static Element copyBindingElement(Element element) {
-    Element retval = new Element();
-    retval.createElement(element.getNamespace(), element.getName());
-    for (int i = 0; i < element.getAttributeCount(); i++) {
-      retval.setAttribute(element.getAttributeNamespace(i), element.getAttributeName(i),
-          element.getAttributeValue(i));
+  protected Integer getNodesetStringLength(AbstractTreeElement<?> e) {
+    List<String> path = new ArrayList<String>();
+    while (e != null && e.getName() != null) {
+      path.add(e.getName());
+      e = e.getParent();
     }
-    return (retval);
+    Collections.reverse(path);
+
+    StringBuilder b = new StringBuilder();
+    for (String s : path) {
+      b.append("/");
+      b.append(s);
+    }
+
+    String nodeset = b.toString();
+    Integer len = stringLengths.get(nodeset);
+    return len;
   }
+
+  private XFormParameters extractFormParameters(TreeElement rootElement, String defaultFormIdValue) {
+
+    String formIdValue = null;
+    String versionString = rootElement.getAttributeValue(null, "version");
+
+    // search for the "id" attribute
+    for (int i = 0; i < rootElement.getAttributeCount(); i++) {
+      String name = rootElement.getAttributeName(i);
+      if (name.equals(FORM_ID_ATTRIBUTE_NAME)) {
+        formIdValue = rootElement.getAttributeValue(i);
+        formIdValue = formIdValue.replaceAll(FORWARD_SLASH,
+            FORWARD_SLASH_SUBSTITUTION);
+        break;
+      }
+    }
+
+    return new XFormParameters((formIdValue == null) ? defaultFormIdValue : formIdValue,
+        versionString);
+  }
+
+  private TreeElement findDepthFirst(TreeElement parent, String name) {
+    int len = parent.getNumChildren();
+    for (int i = 0; i < len; ++i) {
+      TreeElement e = parent.getChildAt(i);
+      if (name.equals(e.getName())) {
+        return e;
+      } else if (e.getNumChildren() != 0) {
+        TreeElement v = findDepthFirst(e, name);
+        if (v != null)
+          return v;
+      }
+    }
+    return null;
+  }
+
+  private String extractBase64FieldEncryptionKey(TreeElement submissionElement) {
+    TreeElement meta = findDepthFirst(submissionElement, "meta");
+    if (meta != null) {
+      List<TreeElement> l;
+
+      // Save the base64 RSA-Encrypted symmetric encryption key
+      // we are using for field encryption.
+      // Do not encrypt the form if we can't save this encrypted key...
+      l = meta.getChildrenWithName(BASE64_ENCRYPTED_FIELD_KEY);
+      if (l.size() == 1) {
+        TreeElement ek = l.get(0);
+        String base64EncryptedFieldRsaPublicKey = getBindAttribute(ek, BASE64_RSA_PUBLIC_KEY);
+        if (base64EncryptedFieldRsaPublicKey != null
+            && base64EncryptedFieldRsaPublicKey.trim().length() == 0) {
+          base64EncryptedFieldRsaPublicKey = null;
+        }
+        return base64EncryptedFieldRsaPublicKey;
+      }
+    }
+    return null;
+  }
+
+  private void storeLengthOfBinding(Element binding) {
+    Optional
+        .ofNullable(binding.getAttributeValue(NAMESPACE_ODK, "length"))
+        .map(Integer::valueOf)
+        .ifPresent(length -> stringLengths.put(binding.getAttributeValue(null, "nodeset"), length));
+  }
+
+  private void storeCopyOfBinding(Element binding) {
+    Element copy = new Element();
+    copy.createElement(binding.getNamespace(), binding.getName());
+    for (int i = 0; i < binding.getAttributeCount(); i++) {
+      copy.setAttribute(binding.getAttributeNamespace(i), binding.getAttributeName(i),
+          binding.getAttributeValue(i));
+    }
+    bindElements.add(copy);
+  }
+
+  public String getTreeElementPath(AbstractTreeElement<?> e) {
+    if (e == null)
+      return null;
+    String s = getTreeElementPath(e.getParent());
+    if (s == null)
+      return e.getName();
+    return s + "/" + e.getName();
+  }
+
+  private List<Element> getBindingsForTreeElement(TreeElement treeElement) {
+    List<Element> l = new ArrayList<Element>();
+    String nodeset = "/" + getTreeElementPath(treeElement);
+
+    for (int i = 0; i < this.bindElements.size(); i++) {
+      Element element = this.bindElements.get(i);
+      if (element.getAttributeValue("", NODESET_ATTR).equalsIgnoreCase(nodeset)) {
+        l.add(element);
+      }
+    }
+
+    return (l);
+  }
+
+  public String getFormId() {
+    return rootElementDefn.formId;
+  }
+
+  // result from comparing two XForms
+  public static enum DifferenceResult {
+    XFORMS_IDENTICAL, // instance and body are identical
+    XFORMS_SHARE_INSTANCE, // instances (including binding) identical; body
+    // differs
+    XFORMS_SHARE_SCHEMA, // instances differ, but share common database schema
+    XFORMS_DIFFERENT, // instances differ significantly enough to affect
+    // database schema
+    XFORMS_MISSING_VERSION, XFORMS_EARLIER_VERSION
+  }
+
 }

@@ -16,13 +16,11 @@
 package org.opendatakit.aggregate.servlet;
 
 import java.io.IOException;
-
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
-
 import org.opendatakit.aggregate.ContextFactory;
+import org.opendatakit.aggregate.HttpUtils;
 import org.opendatakit.common.security.UserService;
 import org.opendatakit.common.web.CallingContext;
 
@@ -30,9 +28,8 @@ import org.opendatakit.common.web.CallingContext;
  * Simple servlet used to clear the session cookie of a client and present the
  * multimode_login.html page to them. This allows for an anonymous user to choose
  * to provide credentials.
- * 
+ *
  * @author mitchellsundt@gmail.com
- * 
  */
 public class ClearSessionThenLoginServlet extends ServletUtilBase {
 
@@ -40,14 +37,12 @@ public class ClearSessionThenLoginServlet extends ServletUtilBase {
    * Standard fields
    */
 
+  public static final String ADDR = "relogin.html";
+  public static final String TITLE_INFO = "ODK Aggregate";
   private static final long serialVersionUID = 629046684126101848L;
 
-  public static final String ADDR = "relogin.html";
-
-  public static final String TITLE_INFO = "ODK Aggregate";
-
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException,
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws
       IOException {
     CallingContext cc = ContextFactory.getCallingContext(this, req);
     UserService userService = cc.getUserService();
@@ -72,13 +67,13 @@ public class ClearSessionThenLoginServlet extends ServletUtilBase {
     } else {
       // we are logged in via token-based or basic or digest auth.
       // redirect to Spring's logout url...
-      newUrl = cc.getWebApplicationURL(cc.getUserService().createLogoutURL());
+      newUrl = cc.getWebApplicationURL("/" + cc.getUserService().createLogoutURL());
     }
     // preserve the query string (helps with GWT debugging)
     String query = req.getQueryString();
     if (query != null && query.length() != 0) {
       newUrl += "?" + query;
     }
-    resp.sendRedirect(newUrl);
+    HttpUtils.redirect(resp, newUrl);
   }
 }

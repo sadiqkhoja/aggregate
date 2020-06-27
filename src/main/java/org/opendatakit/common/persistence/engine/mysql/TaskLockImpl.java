@@ -20,10 +20,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-
-import org.slf4j.LoggerFactory;
 import org.opendatakit.common.persistence.CommonFieldsBase;
 import org.opendatakit.common.persistence.DataField;
 import org.opendatakit.common.persistence.Datastore;
@@ -35,20 +32,19 @@ import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.persistence.exception.ODKEntityNotFoundException;
 import org.opendatakit.common.persistence.exception.ODKTaskLockException;
 import org.opendatakit.common.security.User;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public class TaskLockImpl implements TaskLock {
 
   private static final String PERSISTENCE_LAYER_PROBLEM = "Persistence layer failure";
-  
+  private static final String K_BQ = "`";
   final DatastoreAccessMetrics dam;
   final DatastoreImpl datastore;
   final User user;
@@ -58,8 +54,6 @@ public class TaskLockImpl implements TaskLock {
     this.dam = dam;
     this.user = user;
   }
-
-  private static final String K_BQ = "`";
 
   private TaskLockTable doTransaction(TaskLockTable entity, long l)
       throws ODKEntityNotFoundException, ODKTaskLockException {
@@ -315,14 +309,14 @@ public class TaskLockImpl implements TaskLock {
     b.append("COMMIT");
     stmts.add(b.toString());
     b.setLength(0);
-    
+
     TaskLockTable relation;
     try {
       relation = TaskLockTable.assertRelation(datastore, user);
     } catch (ODKDatastoreException e) {
       throw new ODKTaskLockException(PERSISTENCE_LAYER_PROBLEM, e);
     }
-  
+
     boolean success = false;
     try {
 
@@ -339,9 +333,9 @@ public class TaskLockImpl implements TaskLock {
             String lastResult = null;
             for (String s : stmts) {
               Statement stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT);
-              if ( s.startsWith("SELECT") ) {
+              if (s.startsWith("SELECT")) {
                 ResultSet rs = stmt.executeQuery(s);
-                if ( rs.first() ) {
+                if (rs.first()) {
                   lastResult = rs.getString(1);
                 }
                 rs.close();
@@ -356,7 +350,7 @@ public class TaskLockImpl implements TaskLock {
             e.printStackTrace();
             conn.rollback();
           } finally {
-            if ( !success ) {
+            if (!success) {
               Statement stmt = conn.createStatement();
               LoggerFactory.getLogger(TaskLockImpl.class).info("UNLOCK TABLES");
               stmt.execute("UNLOCK TABLES");
@@ -368,13 +362,13 @@ public class TaskLockImpl implements TaskLock {
         }
 
       });
-      
+
       success = o != null && uri.equals((String) o);
 
     } catch (Exception e) {
       throw new ODKTaskLockException(PERSISTENCE_LAYER_PROBLEM, e);
     }
-    if ( success ) {
+    if (success) {
       return (TaskLockTable) datastore.getEntity(relation, uri, user);
     } else {
       throw new ODKEntityNotFoundException();
@@ -457,7 +451,7 @@ public class TaskLockImpl implements TaskLock {
         DataField.DataType.STRING, false, 80L);
     private static final DataField EXPIRATION_DATETIME = new DataField("EXPIRATION_DATETIME",
         DataField.DataType.DATETIME, true);
-
+    static TaskLockTable relation = null;
     DataField formId;
     DataField taskType;
     DataField expirationDateTime;
@@ -474,6 +468,17 @@ public class TaskLockImpl implements TaskLock {
       formId = ref.formId;
       taskType = ref.taskType;
       expirationDateTime = ref.expirationDateTime;
+    }
+
+    static synchronized final TaskLockTable assertRelation(Datastore datastore, User user)
+        throws ODKDatastoreException {
+      if (relation == null) {
+        TaskLockTable relationPrototype;
+        relationPrototype = new TaskLockTable(datastore.getDefaultSchemaName());
+        datastore.assertRelation(relationPrototype, user);
+        relation = relationPrototype;
+      }
+      return relation;
     }
 
     String getFormId() {
@@ -496,32 +501,9 @@ public class TaskLockImpl implements TaskLock {
       }
     }
 
-    @SuppressWarnings("unused")
-    Date getExpirationDateTime() {
-      return getDateField(expirationDateTime);
-    }
-
-    @SuppressWarnings("unused")
-    void setExpirationDateTime(Date value) {
-      setDateField(expirationDateTime, value);
-    }
-
     @Override
     public CommonFieldsBase getEmptyRow(User user) {
       return new TaskLockTable(this, user);
-    }
-
-    static TaskLockTable relation = null;
-
-    static synchronized final TaskLockTable assertRelation(Datastore datastore, User user)
-        throws ODKDatastoreException {
-      if (relation == null) {
-        TaskLockTable relationPrototype;
-        relationPrototype = new TaskLockTable(datastore.getDefaultSchemaName());
-        datastore.assertRelation(relationPrototype, user);
-        relation = relationPrototype;
-      }
-      return relation;
     }
   }
 }

@@ -18,7 +18,6 @@ package org.opendatakit.aggregate.client.submission;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-
 import org.opendatakit.aggregate.constants.common.UIDisplayType;
 import org.opendatakit.common.persistence.client.UIQueryResumePoint;
 
@@ -30,36 +29,36 @@ public class SubmissionUISummary implements Serializable {
   private static final long serialVersionUID = 4067244808385366754L;
 
   private ArrayList<SubmissionUI> submissions = new ArrayList<SubmissionUI>();
-  
+
   private ArrayList<Column> headers;
-  
+
   private UIQueryResumePoint startCursor;
-  
+
   private UIQueryResumePoint resumeCursor;
-  
+
   private UIQueryResumePoint backwardCursor;
-  
+
   private boolean hasMoreResults;
-  
+
   private boolean hasPriorResults;
 
   private String formTitle;
-  
+
   public SubmissionUISummary() {
     headers = new ArrayList<Column>();
   }
-  
+
   public SubmissionUISummary(String formTitle) {
     this();
     this.formTitle = formTitle;
   }
-    
+
   public ArrayList<Column> getHeaders() {
     return headers;
   }
 
-  public void addSubmission(SubmissionUI submission) {   
-    if(submission.getNumberOfFields() == headers.size()) {
+  public void addSubmission(SubmissionUI submission) {
+    if (submission.getNumberOfFields() == headers.size()) {
       submissions.add(submission);
     } else {
       throw new IllegalArgumentException("Incorrect number of fields contained in submission");
@@ -69,25 +68,21 @@ public class SubmissionUISummary implements Serializable {
   public void addSubmissionHeader(String displayHeader, String columnName) {
     headers.add(new Column(displayHeader, columnName, UIDisplayType.TEXT));
   }
-  
+
   public void addBinarySubmissionHeader(String displayHeader, String columnName) {
-        headers.add(new Column(displayHeader, columnName, UIDisplayType.BINARY));
-  }
-  
-  public void addRepeatSubmissionHeader(String displayHeader, String columnName) {
-        headers.add(new Column(displayHeader, columnName, UIDisplayType.REPEAT));
-}
-  
-  public void addGeopointHeader(String displayHeader, String columnName, Long geopointColumnCode) {
-    headers.add(new Column(displayHeader, columnName, geopointColumnCode));
-  }
-  
-  public ArrayList<SubmissionUI> getSubmissions() {
-    return submissions;
+    headers.add(new Column(displayHeader, columnName, UIDisplayType.BINARY));
   }
 
-  public UIQueryResumePoint getStartCursor() {
-    return startCursor;
+  public void addRepeatSubmissionHeader(String displayHeader, String columnName) {
+    headers.add(new Column(displayHeader, columnName, UIDisplayType.REPEAT));
+  }
+
+  public void addChildColumnHeader(String displayHeader, String columnName, long childColumnCode) {
+    headers.add(new Column(displayHeader, columnName, childColumnCode));
+  }
+
+  public ArrayList<SubmissionUI> getSubmissions() {
+    return submissions;
   }
 
   public void setStartCursor(UIQueryResumePoint startCursor) {
@@ -129,5 +124,4 @@ public class SubmissionUISummary implements Serializable {
   public void setHasPriorResults(boolean hasPriorResults) {
     this.hasPriorResults = hasPriorResults;
   }
-  
 }

@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2009 Google Inc.
  * Copyright (C) 2010 University of Washington.
+ * Copyright (C) 2018 Nafundi
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -17,55 +18,7 @@
 
 package org.opendatakit.aggregate.externalservice;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import javax.servlet.http.HttpServletResponse;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.opendatakit.aggregate.ContextFactory;
-import org.opendatakit.aggregate.constants.BeanDefs;
-import org.opendatakit.aggregate.constants.HtmlUtil;
-import org.opendatakit.aggregate.constants.ServletConsts;
-import org.opendatakit.aggregate.constants.common.ExternalServicePublicationOption;
-import org.opendatakit.aggregate.constants.common.ExternalServiceType;
-import org.opendatakit.aggregate.constants.common.OperationalStatus;
-import org.opendatakit.aggregate.constants.externalservice.ExternalServiceConsts;
-import org.opendatakit.aggregate.datamodel.FormElementKey;
-import org.opendatakit.aggregate.datamodel.FormElementModel;
-import org.opendatakit.aggregate.datamodel.FormElementModel.ElementType;
-import org.opendatakit.aggregate.exception.ODKExternalServiceCredentialsException;
-import org.opendatakit.aggregate.exception.ODKExternalServiceException;
-import org.opendatakit.aggregate.exception.ODKFormNotFoundException;
-import org.opendatakit.aggregate.form.IForm;
-import org.opendatakit.aggregate.form.MiscTasks;
-import org.opendatakit.aggregate.form.MiscTasks.TaskType;
-import org.opendatakit.aggregate.format.Row;
-import org.opendatakit.aggregate.format.element.LinkElementFormatter;
-import org.opendatakit.aggregate.format.header.GoogleSpreadsheetHeaderFormatter;
-import org.opendatakit.aggregate.servlet.FormMultipleValueServlet;
-import org.opendatakit.aggregate.submission.Submission;
-import org.opendatakit.aggregate.submission.SubmissionSet;
-import org.opendatakit.aggregate.submission.SubmissionValue;
-import org.opendatakit.aggregate.submission.type.RepeatSubmissionType;
-import org.opendatakit.aggregate.task.WorksheetCreator;
-import org.opendatakit.common.persistence.CommonFieldsBase;
-import org.opendatakit.common.persistence.Datastore;
-import org.opendatakit.common.persistence.exception.ODKDatastoreException;
-import org.opendatakit.common.persistence.exception.ODKEntityNotFoundException;
-import org.opendatakit.common.persistence.exception.ODKEntityPersistException;
-import org.opendatakit.common.persistence.exception.ODKOverQuotaException;
-import org.opendatakit.common.security.User;
-import org.opendatakit.common.security.common.EmailParser;
-import org.opendatakit.common.utils.WebUtils;
-import org.opendatakit.common.web.CallingContext;
-import org.opendatakit.common.web.constants.HtmlConsts;
+import static java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -99,53 +52,75 @@ import com.google.api.services.sheets.v4.model.Sheet;
 import com.google.api.services.sheets.v4.model.SheetProperties;
 import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.google.api.services.sheets.v4.model.UpdateCellsRequest;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.servlet.http.HttpServletResponse;
+import org.opendatakit.aggregate.ContextFactory;
+import org.opendatakit.aggregate.constants.BeanDefs;
+import org.opendatakit.aggregate.constants.HtmlUtil;
+import org.opendatakit.aggregate.constants.ServletConsts;
+import org.opendatakit.aggregate.constants.common.ExternalServicePublicationOption;
+import org.opendatakit.aggregate.constants.common.ExternalServiceType;
+import org.opendatakit.aggregate.constants.common.OperationalStatus;
+import org.opendatakit.aggregate.constants.externalservice.ExternalServiceConsts;
+import org.opendatakit.aggregate.datamodel.FormElementKey;
+import org.opendatakit.aggregate.datamodel.FormElementModel;
+import org.opendatakit.aggregate.datamodel.FormElementModel.ElementType;
+import org.opendatakit.aggregate.exception.ODKExternalServiceCredentialsException;
+import org.opendatakit.aggregate.exception.ODKExternalServiceException;
+import org.opendatakit.aggregate.form.IForm;
+import org.opendatakit.aggregate.form.MiscTasks;
+import org.opendatakit.aggregate.form.MiscTasks.TaskType;
+import org.opendatakit.aggregate.format.Row;
+import org.opendatakit.aggregate.format.element.LinkElementFormatter;
+import org.opendatakit.aggregate.format.header.GoogleSpreadsheetHeaderFormatter;
+import org.opendatakit.aggregate.servlet.FormMultipleValueServlet;
+import org.opendatakit.aggregate.submission.Submission;
+import org.opendatakit.aggregate.submission.SubmissionSet;
+import org.opendatakit.aggregate.submission.SubmissionValue;
+import org.opendatakit.aggregate.submission.type.RepeatSubmissionType;
+import org.opendatakit.aggregate.task.WorksheetCreator;
+import org.opendatakit.common.persistence.CommonFieldsBase;
+import org.opendatakit.common.persistence.Datastore;
+import org.opendatakit.common.persistence.exception.ODKDatastoreException;
+import org.opendatakit.common.security.User;
+import org.opendatakit.common.security.common.EmailParser;
+import org.opendatakit.common.utils.WebUtils;
+import org.opendatakit.common.web.CallingContext;
+import org.opendatakit.common.web.constants.HtmlConsts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- *
- * @author wbrunette@gmail.com
- * @author mitchellsundt@gmail.com
- *
- */
 public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements ExternalService {
   private static final Logger logger = LoggerFactory.getLogger(GoogleSpreadsheet.class.getName());
 
   private static final String GOOGLE_DRIVE_FILES_API = "https://www.googleapis.com/drive/v2/files";
 
   private static final String GOOGLE_SPREADSHEET_OAUTH2_SCOPE = "https://www.googleapis.com/auth/drive " + SheetsScopes.SPREADSHEETS;
-
+  /**
+   * Global instance of the JSON factory.
+   */
+  private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
   private static ObjectMapper mapper = new ObjectMapper();
-
   /**
    * Datastore entity specific to this type of external service
    */
   private final GoogleSpreadsheet2ParameterTable objectEntity;
-
   /**
    * Datastore entity specific to this type of external service for the repeats
    */
   private final List<GoogleSpreadsheet2RepeatParameterTable> repeatElementEntities = new ArrayList<GoogleSpreadsheet2RepeatParameterTable>();
-
   private final Sheets spreadsheetService;
+  private Map<String, SheetInfo> sheetInfoMap = null;
 
-  /** Global instance of the JSON factory. */
-  private static final JsonFactory JSON_FACTORY =
-      JacksonFactory.getDefaultInstance();
-
-  /**
-   * Common base constructor that initializes final values.
-   *
-   * @param form
-   * @param fpObject
-   * @param cc
-   * @throws ODKExternalServiceException
-   * @throws IOException
-   * @throws GeneralSecurityException
-   */
-
-  private GoogleSpreadsheet(IForm form, GoogleSpreadsheet2ParameterTable gsObject,
-      FormServiceCursor formServiceCursor, CallingContext cc) throws ODKExternalServiceException {
+  private GoogleSpreadsheet(IForm form, GoogleSpreadsheet2ParameterTable gsObject, FormServiceCursor formServiceCursor, CallingContext cc) throws ODKExternalServiceException {
     super(GOOGLE_SPREADSHEET_OAUTH2_SCOPE, form, formServiceCursor, new LinkElementFormatter(
-        cc.getServerURL(), FormMultipleValueServlet.ADDR, true, true, true, true),
+            cc.getServerURL(), FormMultipleValueServlet.ADDR, true, true, true, true),
         new GoogleSpreadsheetHeaderFormatter(true, true, true), cc);
 
     try {
@@ -163,17 +138,13 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     objectEntity = gsObject;
   }
 
-  private GoogleSpreadsheet(IForm form, GoogleSpreadsheet2ParameterTable entity,
-      ExternalServicePublicationOption externalServiceOption, String ownerEmail, CallingContext cc)
-      throws ODKDatastoreException, ODKOverQuotaException, ODKExternalServiceException {
+  private GoogleSpreadsheet(IForm form, GoogleSpreadsheet2ParameterTable entity, ExternalServicePublicationOption externalServiceOption, String ownerEmail, CallingContext cc) throws ODKDatastoreException, ODKExternalServiceException {
     this(form, entity, createFormServiceCursor(form, entity, externalServiceOption,
         ExternalServiceType.GOOGLE_SPREADSHEET, cc), cc);
     objectEntity.setOwnerEmail(ownerEmail);
   }
 
-  public GoogleSpreadsheet(FormServiceCursor fsc, IForm form, CallingContext cc)
-      throws ODKEntityNotFoundException, ODKDatastoreException, ODKOverQuotaException,
-      ODKExternalServiceException, ODKFormNotFoundException {
+  public GoogleSpreadsheet(FormServiceCursor fsc, IForm form, CallingContext cc) throws ODKDatastoreException, ODKExternalServiceException {
     this(form, retrieveEntity(GoogleSpreadsheet2ParameterTable.assertRelation(cc), fsc, cc), fsc,
         cc);
 
@@ -182,10 +153,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
 
   }
 
-  public GoogleSpreadsheet(IForm form, String name,
-      ExternalServicePublicationOption externalServiceOption, String ownerEmail, CallingContext cc)
-      throws ODKDatastoreException, ODKOverQuotaException, ODKExternalServiceException,
-      ODKEntityPersistException {
+  public GoogleSpreadsheet(IForm form, String name, ExternalServicePublicationOption externalServiceOption, String ownerEmail, CallingContext cc) throws ODKDatastoreException, ODKExternalServiceException {
     this(form, newEntity(GoogleSpreadsheet2ParameterTable.assertRelation(cc), cc),
         externalServiceOption, ownerEmail, cc);
 
@@ -193,11 +161,9 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     persist(cc);
   }
 
-  protected String executeDriveStmt(String spreadsheetTitle, String spreadsheetDescription,
-      CallingContext cc) throws
-      IOException, ODKExternalServiceException, GeneralSecurityException {
+  protected String executeDriveStmt(String spreadsheetTitle, String spreadsheetDescription, CallingContext cc) throws IOException, ODKExternalServiceException {
 
-    HashMap<String,String> requestBody = new HashMap<String,String>();
+    HashMap<String, String> requestBody = new HashMap<String, String>();
     requestBody.put("title", spreadsheetTitle);
     requestBody.put("description", spreadsheetDescription);
     requestBody.put("mimeType", "application/vnd.google-apps.spreadsheet");
@@ -231,23 +197,22 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
 
       // create spreadsheet
       String spreadsheetName = getSpreadsheetName();
-      String spreadsheetDescription = spreadsheetName + " ODK Aggregate " + WebUtils.iso8601Date(new Date());
+      String spreadsheetDescription = spreadsheetName + " ODK Aggregate " + OffsetDateTime.now().format(ISO_OFFSET_DATE_TIME);
       // will hold doc id
       String spreadKey = null;
       try {
         String response = executeDriveStmt(spreadsheetName, spreadsheetDescription, cc);
 
         // convert response from json to Java
-        TypeReference<HashMap<Object,Object>> ref = new TypeReference<HashMap<Object,Object>>() {};
-        HashMap<Object,Object> map = mapper.readValue(response, ref);
+        TypeReference<HashMap<Object, Object>> ref = new TypeReference<HashMap<Object, Object>>() {
+        };
+        HashMap<Object, Object> map = mapper.readValue(response, ref);
 
         // get document ID (spreadsheet 'key')
         spreadKey = (String) map.get("id");
 
       } catch (IOException e) {
         throw new ODKExternalServiceException(e);
-      } catch (GeneralSecurityException e) {
-        throw new ODKExternalServiceCredentialsException(e);
       }
 
       objectEntity.setSpreadsheetKey(spreadKey);
@@ -257,25 +222,21 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     persist(cc);
 
     if (newlyCreated || !getReady()) {
-      try {
-        // create worksheet
-        WorksheetCreator ws = (WorksheetCreator) cc.getBean(BeanDefs.WORKSHEET_BEAN);
+      // create worksheet
+      WorksheetCreator ws = (WorksheetCreator) cc.getBean(BeanDefs.WORKSHEET_BEAN);
 
-        Map<String, String> parameters = new HashMap<String, String>();
+      Map<String, String> parameters = new HashMap<String, String>();
 
-        parameters.put(ExternalServiceConsts.EXT_SERV_ADDRESS, getSpreadsheetName());
-        parameters.put(ServletConsts.EXTERNAL_SERVICE_TYPE, fsc
-            .getExternalServicePublicationOption().name());
+      parameters.put(ExternalServiceConsts.EXT_SERV_ADDRESS, getSpreadsheetName());
+      parameters.put(ServletConsts.EXTERNAL_SERVICE_TYPE, fsc
+          .getExternalServicePublicationOption().name());
 
-        MiscTasks m = new MiscTasks(TaskType.WORKSHEET_CREATE, form, parameters, cc);
-        m.persist(cc);
+      MiscTasks m = new MiscTasks(TaskType.WORKSHEET_CREATE, form, parameters, cc);
+      m.persist(cc);
 
-        CallingContext ccDaemon = ContextFactory.duplicateContext(cc);
-        ccDaemon.setAsDaemon(true);
-        ws.createWorksheetTask(form, m, 1L, ccDaemon);
-      } catch (ODKFormNotFoundException e) {
-        logger.error("Google spreadsheet error", e);
-      }
+      CallingContext ccDaemon = ContextFactory.duplicateContext(cc);
+      ccDaemon.setAsDaemon(true);
+      ws.createWorksheetTask(form, m, 1L, ccDaemon);
     } else {
       // upload data to external service
       postUploadTask(cc);
@@ -287,8 +248,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     return objectEntity.getOwnerEmail().substring(EmailParser.K_MAILTO.length());
   }
 
-  private void sharePublishedFiles(String ownerEmail, CallingContext cc)
-      throws ODKExternalServiceException {
+  private void sharePublishedFiles(String ownerEmail, CallingContext cc) throws ODKExternalServiceException {
     executeDrivePermission(objectEntity.getSpreadsheetKey(), ownerEmail);
   }
 
@@ -306,8 +266,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     return objectEntity.getSpreadsheetName();
   }
 
-  public void generateWorksheets(CallingContext cc) throws ODKDatastoreException, IOException,
-      ODKExternalServiceException {
+  public void generateWorksheets(CallingContext cc) throws ODKDatastoreException, IOException, ODKExternalServiceException {
 
     // TODO: throw meaningful credentials-failure exception
     // TODO: throw meaningful credentials-failure exception
@@ -373,7 +332,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
         requests.add(req);
       }
 
-      if ( !requests.isEmpty() ) {
+      if (!requests.isEmpty()) {
         BatchUpdateSpreadsheetRequest req = new BatchUpdateSpreadsheetRequest();
         req.setRequests(requests);
         req.setIncludeSpreadsheetInResponse(false);
@@ -382,7 +341,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
         List<Response> responses = rsp.getReplies();
 
         // And now stitch everything back together
-        if ( responses.size() != 1 + form.getRepeatGroupsInModel().size() + preExistingWorksheets.size() ) {
+        if (responses.size() != 1 + form.getRepeatGroupsInModel().size() + preExistingWorksheets.size()) {
           throw new IllegalStateException("Mismatch in number of responses for number of requests in batch");
         }
         AddSheetResponse asrsp = responses.get(0).getAddSheet();
@@ -402,7 +361,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
         for (FormElementModel repeatGroupElement : form.getRepeatGroupsInModel()) {
           ++repeatGroupCount;
           // create the worksheet
-          asrsp = responses.get(1+repeatGroupCount).getAddSheet();
+          asrsp = responses.get(1 + repeatGroupCount).getAddSheet();
           // add the worksheet id to the repeat element table -- NOTE: the added
           // entry is not actually persisted here
           GoogleSpreadsheet2RepeatParameterTable t = ds
@@ -418,7 +377,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     }
 
     List<Request> requests = new ArrayList<Request>();
-    // Write the header cells in these sheets. 
+    // Write the header cells in these sheets.
 
     // create top level worksheet
     List<String> headers = headerFormatter.generateHeaders(form, form.getTopLevelGroupElement(),
@@ -435,12 +394,12 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
       // create the worksheet
       headers = headerFormatter.generateHeaders(form, repeatGroupElement, null);
       UpdateCellsRequest repeatWorksheet = writeColumnHeadingsCells(
-          repeatGroupElement.getElementName(), headers, sheetIds.get(1+repeatGroupCount));
+          repeatGroupElement.getElementName(), headers, sheetIds.get(1 + repeatGroupCount));
 
       requests.add(new Request().setUpdateCells(repeatWorksheet));
     }
 
-    if ( !requests.isEmpty() ) {
+    if (!requests.isEmpty()) {
       BatchUpdateSpreadsheetRequest req = new BatchUpdateSpreadsheetRequest();
       req.setRequests(requests);
       req.setIncludeSpreadsheetInResponse(false);
@@ -461,8 +420,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     persist(cc);
   }
 
-  private UpdateCellsRequest writeColumnHeadingsCells(String title, List<String> headers, Integer sheetId)
-      throws IOException {
+  private UpdateCellsRequest writeColumnHeadingsCells(String title, List<String> headers, Integer sheetId) {
 
     // build the update request.
     UpdateCellsRequest req = new UpdateCellsRequest();
@@ -480,7 +438,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
 
     List<CellData> cells = new ArrayList<CellData>();
     int index = 0;
-    for ( index = 0 ; index < headers.size(); ++index) {
+    for (index = 0; index < headers.size(); ++index) {
       String header = headers.get(index);
       CellData cellData = new CellData();
       ExtendedValue ev = new ExtendedValue();
@@ -499,21 +457,12 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     return req;
   }
 
-  private static class SheetInfo {
-    Integer sheetId;
-    List<String> headers;
-    List<ElementType> headerTypes;
-    Map<Integer,Integer> fieldMap = new HashMap<Integer,Integer>();
-  }
-
-  private Map<String, SheetInfo> sheetInfoMap = null;
-
   private void buildSheetInfoMap(CallingContext cc) throws IOException {
-    if ( sheetInfoMap != null ) return;
+    if (sheetInfoMap != null) return;
 
     List<Sheet> sheets = spreadsheetService.spreadsheets().get(objectEntity.getSpreadsheetKey()).execute().getSheets();
     Map<Integer, Sheet> sheetMap = new HashMap<Integer, Sheet>();
-    for ( Sheet sheet : sheets ) {
+    for (Sheet sheet : sheets) {
       sheetMap.put(sheet.getProperties().getSheetId(), sheet);
     }
     Sheet existingSheet;
@@ -536,7 +485,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     // build gridRange request for top-level sheet headers
     existingSheet = sheetMap.get(sheetInfo.sheetId);
     ranges.add(existingSheet.getProperties().getTitle() + "!R1C1:R1C"
-    + Integer.valueOf(existingSheet.getProperties().getGridProperties().getColumnCount()));
+        + Integer.valueOf(existingSheet.getProperties().getGridProperties().getColumnCount()));
 
     // build gridRange request for repeat group sheet headers
     for (GoogleSpreadsheet2RepeatParameterTable tableId : repeatElementEntities) {
@@ -547,7 +496,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
       // build sheetInfo map
       sheetInfo = new SheetInfo();
       sheetInfo.sheetId = Integer.valueOf(tableId.getWorksheetId());
-      sheetInfo.headers =  headerFormatter.generateHeaders(form, element, null);
+      sheetInfo.headers = headerFormatter.generateHeaders(form, element, null);
       sheetInfo.headerTypes = headerFormatter.getHeaderTypes();
 
       workingSheetInfoMap.put(tableId.getWorksheetId(), sheetInfo);
@@ -560,32 +509,32 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     req.setIncludeGridData(true);
     Spreadsheet entry = req.execute();
 
-    for ( Sheet sheet : entry.getSheets() ) {
+    for (Sheet sheet : entry.getSheets()) {
       Integer id = sheet.getProperties().getSheetId();
       sheetInfo = workingSheetInfoMap.get(Integer.toString(id));
 
-      for ( GridData data : sheet.getData() ) {
+      for (GridData data : sheet.getData()) {
         // there may be extra entries to ignore
-        if ( data == null ) {
+        if (data == null) {
           continue;
         }
         Integer startCol = 0;
         // there may be extra rows to ignore
         List<CellData> cells = data.getRowData().get(0).getValues();
 
-        for ( CellData cell : cells ) {
-          if ( cell == null ) {
+        for (CellData cell : cells) {
+          if (cell == null) {
             startCol++;
             continue;
           }
           String header = cell.getFormattedValue();
-          if ( header == null ) {
+          if (header == null) {
             startCol++;
             continue;
           }
-          for ( int i = 0 ; i < sheetInfo.headers.size() ; ++i ) {
+          for (int i = 0; i < sheetInfo.headers.size(); ++i) {
             String hcol = sheetInfo.headers.get(i);
-            if ( hcol.equals(header) ) {
+            if (hcol.equals(header)) {
               sheetInfo.fieldMap.put(i, startCol);
               break;
             }
@@ -598,8 +547,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
   }
 
   @Override
-  protected void insertData(Submission submission, CallingContext cc)
-      throws ODKExternalServiceException {
+  protected void insertData(Submission submission, CallingContext cc) throws ODKExternalServiceException {
     if (getReady()) {
       try {
         buildSheetInfoMap(cc);
@@ -635,7 +583,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
           }
         }
 
-        if ( !requests.isEmpty() ) {
+        if (!requests.isEmpty()) {
           BatchUpdateSpreadsheetRequest req = new BatchUpdateSpreadsheetRequest();
           req.setRequests(requests);
           req.setIncludeSpreadsheetInResponse(false);
@@ -654,24 +602,8 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
   /**
    * Creates the request to append the data in the given submissionSet as a new entry (i.e. a new row)
    * in the given worksheet, including only the data specified by headers.
-   *
-   * @param submissionSet
-   *          the set of data from a single submission
-   * @param sheetInfo
-   *          encapsulates information about the Sheet (worksheet) and the
-   *          list of headers we are publishing into, and the mapping between the two.
-   * @param cc
-   *          the calling context
-   * @throws ODKDatastoreException
-   *           if there was a problem in the datastore
-   * @throws IOException
-   *           if there was a problem communicating over the internet with the
-   *           Google Spreadsheet
-   * @throws ServiceException
-   *           if there was a problem with the GData service
    */
-  private AppendCellsRequest createAppendCellsRequest(SubmissionSet submissionSet, SheetInfo sheetInfo,
-      CallingContext cc) throws ODKDatastoreException, IOException {
+  private AppendCellsRequest createAppendCellsRequest(SubmissionSet submissionSet, SheetInfo sheetInfo, CallingContext cc) throws ODKDatastoreException {
 
     Row row = submissionSet.getFormattedValuesAsRow(null, formatter, true, cc);
     List<String> formattedValues = row.getFormattedValues();
@@ -685,17 +617,18 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     int minNewCol = 0;
     int maxNewCol = 0;
     for (int colIndex = 0; colIndex < sheetInfo.headers.size(); colIndex++) {
-      Integer newCol = sheetInfo.fieldMap.get(colIndex);;
+      Integer newCol = sheetInfo.fieldMap.get(colIndex);
+      ;
       minNewCol = (minNewCol < newCol) ? minNewCol : newCol;
       maxNewCol = (maxNewCol > newCol) ? maxNewCol : newCol;
       ElementType type = sheetInfo.headerTypes.get(colIndex);
       rowString = formattedValues.get(colIndex);
       CellData cellData = new CellData();
-      if ( rowString == null ) {
+      if (rowString == null) {
         cellData.setUserEnteredValue(new ExtendedValue());
       } else {
         ExtendedValue ev;
-        switch ( type ) {
+        switch (type) {
           case BOOLEAN:
             ev = new ExtendedValue();
             ev.setBoolValue(Boolean.valueOf(rowString));
@@ -719,7 +652,7 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
       cellReorderMap.put(newCol, cellData);
     }
 
-    if ( minNewCol < 0 ) {
+    if (minNewCol < 0) {
       throw new IllegalStateException("Expected columns in row to start at index 0");
     }
 
@@ -728,9 +661,9 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     acr.setSheetId(sheetInfo.sheetId);
     RowData rowData = new RowData();
     List<CellData> cells = new ArrayList<CellData>();
-    for ( int col = 0 ; col <= maxNewCol; ++col ) {
+    for (int col = 0; col <= maxNewCol; ++col) {
       CellData cell = cellReorderMap.get(col);
-      if ( cell == null ) {
+      if (cell == null) {
         cell = new CellData();
       }
       cells.add(cell);
@@ -742,9 +675,6 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
     return acr;
   }
 
-  /**
-   * @see java.lang.Object#equals(java.lang.Object)
-   */
   @Override
   public boolean equals(Object obj) {
     if (!(obj instanceof GoogleSpreadsheet)) {
@@ -775,5 +705,12 @@ public class GoogleSpreadsheet extends GoogleOauth2ExternalService implements Ex
   @Override
   protected List<? extends CommonFieldsBase> retrieveRepeatElementEntities() {
     return repeatElementEntities;
+  }
+
+  private static class SheetInfo {
+    Integer sheetId;
+    List<String> headers;
+    List<ElementType> headerTypes;
+    Map<Integer, Integer> fieldMap = new HashMap<Integer, Integer>();
   }
 }

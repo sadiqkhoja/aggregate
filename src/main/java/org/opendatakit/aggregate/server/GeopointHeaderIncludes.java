@@ -24,16 +24,12 @@ public class GeopointHeaderIncludes {
   private boolean includeAccuracy;
 
   public GeopointHeaderIncludes(String elementName, boolean latitude, boolean longitude,
-      boolean altitude, boolean accuracy) {
+                                boolean altitude, boolean accuracy) {
     this.elementName = elementName;
     this.includeLatitude = latitude;
     this.includeLongitude = longitude;
     this.includeAltitude = altitude;
     this.includeAccuracy = accuracy;
-  }
-
-  public String getElementName() {
-    return elementName;
   }
 
   public boolean includeLatitude() {

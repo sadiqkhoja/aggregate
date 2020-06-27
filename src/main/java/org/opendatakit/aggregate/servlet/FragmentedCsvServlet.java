@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2009 Google Inc. 
+ * Copyright (C) 2009 Google Inc.
  * Copyright (C) 2010 University of Washington.
- * 
+ * Copyright (C) 2018 Nafundi
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,22 +18,21 @@
 
 package org.opendatakit.aggregate.servlet;
 
+import static org.opendatakit.aggregate.submission.type.jr.JRTemporalUtils.parseDate;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
 import org.opendatakit.aggregate.ContextFactory;
 import org.opendatakit.aggregate.constants.ErrorConsts;
 import org.opendatakit.aggregate.constants.HtmlUtil;
 import org.opendatakit.aggregate.constants.ServletConsts;
 import org.opendatakit.aggregate.datamodel.FormElementModel;
 import org.opendatakit.aggregate.exception.ODKFormNotFoundException;
-import org.opendatakit.aggregate.exception.ODKIncompleteSubmissionData;
 import org.opendatakit.aggregate.exception.ODKParseException;
 import org.opendatakit.aggregate.form.FormFactory;
 import org.opendatakit.aggregate.form.IForm;
@@ -46,37 +46,26 @@ import org.opendatakit.aggregate.submission.SubmissionSet;
 import org.opendatakit.aggregate.submission.type.RepeatSubmissionType;
 import org.opendatakit.common.persistence.QueryResumePoint;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
-import org.opendatakit.common.utils.WebUtils;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 import org.opendatakit.common.web.constants.HtmlConsts;
 
-/**
- * Servlet to generate a CSV file for download, in parts!
- * 
- * @author wbrunette@gmail.com
- * @author mitchellsundt@gmail.com
- * 
- */
 public class FragmentedCsvServlet extends ServletUtilBase {
 
-  private static final long serialVersionUID = 9161862118534323521L;
-
-  /**
-   * Title for generated webpage
-   */
-  private static final String TITLE_INFO = "Download CSV Dataset Range";
-
-  private static final String WEBSAFE_CURSOR_SEPARATOR = " and ";
   /**
    * URI from base
    */
   public static final String ADDR = "view/csvFragment";
-
+  private static final long serialVersionUID = 9161862118534323521L;
+  /**
+   * Title for generated webpage
+   */
+  private static final String TITLE_INFO = "Download CSV Dataset Range";
+  private static final String WEBSAFE_CURSOR_SEPARATOR = " and ";
   private static final int DEFAULT_NUM_ENTRIES = 1000;
 
   private void emitInfoPage(HttpServletRequest req, HttpServletResponse resp,
-      String errorDescription, int status, CallingContext cc) throws IOException {
+                            String errorDescription, int status, CallingContext cc) throws IOException {
     beginBasicHtmlResponse(TITLE_INFO, resp, cc); // header info
     String requestPath = cc.getServerURL() + BasicConsts.FORWARDSLASH + ADDR;
 
@@ -88,26 +77,26 @@ public class FragmentedCsvServlet extends ServletUtilBase {
         HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, "Parameter")
             + HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, "Description"))
         + HtmlUtil.wrapWithHtmlTags(
-            HtmlConsts.TABLE_ROW,
-            HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.FORM_ID)
-                + HtmlUtil
-                    .wrapWithHtmlTags(
-                        HtmlConsts.TABLE_DATA,
-                        "Required for accessing all data associated with a form.  This is a path rooted at the Form Identity displayed in the forms list."))
+        HtmlConsts.TABLE_ROW,
+        HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.FORM_ID)
+            + HtmlUtil
+            .wrapWithHtmlTags(
+                HtmlConsts.TABLE_DATA,
+                "Required for accessing all data associated with a form.  This is a path rooted at the Form Identity displayed in the forms list."))
         + HtmlUtil.wrapWithHtmlTags(
-            HtmlConsts.TABLE_ROW,
-            HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.NUM_ENTRIES)
-                + HtmlUtil
-                    .wrapWithHtmlTags(
-                        HtmlConsts.TABLE_DATA,
-                        "Optional.  The number of rows of data to return in a result csv.  If you are having transmission issues, you may need to reduce the number of records you fetch.  The default is 1000."))
+        HtmlConsts.TABLE_ROW,
+        HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.NUM_ENTRIES)
+            + HtmlUtil
+            .wrapWithHtmlTags(
+                HtmlConsts.TABLE_DATA,
+                "Optional.  The number of rows of data to return in a result csv.  If you are having transmission issues, you may need to reduce the number of records you fetch.  The default is 1000."))
         + HtmlUtil.wrapWithHtmlTags(
-            HtmlConsts.TABLE_ROW,
-            HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.CURSOR)
-                + HtmlUtil
-                    .wrapWithHtmlTags(
-                        HtmlConsts.TABLE_DATA,
-                        "Optional.  Required for accessing subsequent blocks of data.  Supplied as the <cursor> value from the previous web request.")));
+        HtmlConsts.TABLE_ROW,
+        HtmlUtil.wrapWithHtmlTags(HtmlConsts.TABLE_DATA, ServletConsts.CURSOR)
+            + HtmlUtil
+            .wrapWithHtmlTags(
+                HtmlConsts.TABLE_DATA,
+                "Optional.  Required for accessing subsequent blocks of data.  Supplied as the <cursor> value from the previous web request.")));
     out.write(HtmlConsts.TABLE_CLOSE);
 
     String formIdentity = "widgets";
@@ -132,15 +121,15 @@ public class FragmentedCsvServlet extends ServletUtilBase {
                 + "=widgets/widgets/repeat_a")
                 + " returns all repeat_a rows.")
             + HtmlUtil.wrapWithHtmlTags(
-                HtmlConsts.LI,
-                HtmlUtil.wrapWithHtmlTags(HtmlConsts.PRE, requestPath + "?" + ServletConsts.FORM_ID
-                    + "=widgets/widgets[@key=\"aaaa\"]/repeat_a")
-                    + " returns all repeat_a rows for the widgets record identified by key \"aaaa\".")
+            HtmlConsts.LI,
+            HtmlUtil.wrapWithHtmlTags(HtmlConsts.PRE, requestPath + "?" + ServletConsts.FORM_ID
+                + "=widgets/widgets[@key=\"aaaa\"]/repeat_a")
+                + " returns all repeat_a rows for the widgets record identified by key \"aaaa\".")
             + HtmlUtil.wrapWithHtmlTags(
-                HtmlConsts.LI,
-                HtmlUtil.wrapWithHtmlTags(HtmlConsts.PRE, requestPath + "?" + ServletConsts.FORM_ID
-                    + "=widgets/widgets/repeat_a[@key=\"bbb\"]")
-                    + " returns the repeat_a row identified by key \"bbb\".")));
+            HtmlConsts.LI,
+            HtmlUtil.wrapWithHtmlTags(HtmlConsts.PRE, requestPath + "?" + ServletConsts.FORM_ID
+                + "=widgets/widgets/repeat_a[@key=\"bbb\"]")
+                + " returns the repeat_a row identified by key \"bbb\".")));
     out.write(HtmlUtil.wrapWithHtmlTags(HtmlConsts.P,
         "The data returned is a text/xml document as follows:"));
     out.write(HtmlUtil
@@ -166,9 +155,9 @@ public class FragmentedCsvServlet extends ServletUtilBase {
 
   /**
    * Handler for HTTP Get request that responds with CSV
-   * 
+   *
    * @see javax.servlet.http.HttpServlet#doGet(javax.servlet.http.HttpServletRequest,
-   *      javax.servlet.http.HttpServletResponse)
+   *     javax.servlet.http.HttpServletResponse)
    */
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -240,7 +229,7 @@ public class FragmentedCsvServlet extends ServletUtilBase {
           return; // ill-formed definition
         }
         Submission sub = Submission.fetchSubmission(submissionKeyParts, cc);
-        if ( sub == null ) {
+        if (sub == null) {
           throw new ODKDatastoreException("Unable to retrieve submission (see logs)");
         }
         FormElementModel m = form.getFormElementModel(submissionKeyParts);
@@ -274,7 +263,7 @@ public class FragmentedCsvServlet extends ServletUtilBase {
 
         if (!submissions.isEmpty()) {
           QueryResumePoint resumeCursor = query.getResumeCursor();
-          Date resumeDate = WebUtils.parseDate(resumeCursor.getValue());
+          Date resumeDate = parseDate(resumeCursor.getValue());
           websafeCursorString = Long.toString(resumeDate.getTime())
               + " and " + resumeCursor.getUriLastReturnedValue();
         } else {
@@ -300,9 +289,6 @@ public class FragmentedCsvServlet extends ServletUtilBase {
       e.printStackTrace();
       emitInfoPage(req, resp, e.getMessage(), HttpServletResponse.SC_BAD_REQUEST, cc);
     } catch (ODKDatastoreException e) {
-      e.printStackTrace();
-      errorRetreivingData(resp);
-    } catch (ODKIncompleteSubmissionData e) {
       e.printStackTrace();
       errorRetreivingData(resp);
     }

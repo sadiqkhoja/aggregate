@@ -16,7 +16,6 @@
 package org.opendatakit.aggregate.externalservice;
 
 import java.util.Date;
-
 import org.opendatakit.aggregate.constants.common.OperationalStatus;
 import org.opendatakit.aggregate.submission.Submission;
 
@@ -25,7 +24,6 @@ import org.opendatakit.aggregate.submission.Submission;
  * publishers.
  *
  * @author wbrunette@gmail.com
- *
  */
 public class ExternalServiceUtils {
 
@@ -33,8 +31,6 @@ public class ExternalServiceUtils {
    * If the FormServiceCursor is ACTIVE, transition to ACTIVE_PAUSE. If it is
    * ACTIVE_RETRY, transition to PAUSE. If it is ESTABLISHED, transition to
    * ABANDONED. Otherwise, retain its current (non-active) state.
-   *
-   * @param fsc
    */
   public static void pauseFscOperationalStatus(FormServiceCursor fsc) {
     OperationalStatus current = fsc.getOperationalStatus();
@@ -51,13 +47,9 @@ public class ExternalServiceUtils {
    * Update the FormServiceCursor to the MarkedAsCompleteDate and Uri of the
    * indicated submission; transition into the ACTIVE state. NOTE: the
    * FormServiceCursor may have been in an ACTIVE_RETRY state.
-   *
-   * @param fsc
-   * @param submission
-   * @param streaming
    */
   public static void updateFscToSuccessfulSubmissionDate(FormServiceCursor fsc,
-      Submission submission, boolean streaming) {
+                                                         Submission submission, boolean streaming) {
     // See QueryByDateRange
     // -- we are querying by the markedAsCompleteDate
     Date lastDateSent = submission.getMarkedAsCompleteDate();

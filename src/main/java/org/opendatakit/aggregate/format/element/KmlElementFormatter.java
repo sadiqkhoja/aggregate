@@ -15,14 +15,12 @@
  */
 package org.opendatakit.aggregate.format.element;
 
-import java.util.Calendar;
+
 import java.util.Date;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
-
+import java.util.Optional;
 import org.opendatakit.aggregate.constants.HtmlUtil;
 import org.opendatakit.aggregate.constants.ServletConsts;
 import org.opendatakit.aggregate.constants.format.FormTableConsts;
@@ -36,16 +34,15 @@ import org.opendatakit.aggregate.submission.SubmissionKey;
 import org.opendatakit.aggregate.submission.SubmissionRepeat;
 import org.opendatakit.aggregate.submission.type.BlobSubmissionType;
 import org.opendatakit.aggregate.submission.type.GeoPoint;
+import org.opendatakit.aggregate.submission.type.jr.JRTemporal;
 import org.opendatakit.common.persistence.WrappedBigDecimal;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 
 /**
- *
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- *
  */
 public class KmlElementFormatter implements ElementFormatter {
 
@@ -60,9 +57,9 @@ public class KmlElementFormatter implements ElementFormatter {
 
   /**
    * Construct a KML Element Formatter
-   * @param webServerUrl base url for the web app (e.g., localhost:8080/ODKAggregatePlatform)
-   * @param includeGpsAccuracy
-   *          include GPS accuracy data
+   *
+   * @param webServerUrl       base url for the web app (e.g., localhost:8080/ODKAggregatePlatform)
+   * @param includeGpsAccuracy include GPS accuracy data
    */
   public KmlElementFormatter(String webServerUrl, boolean includeGpsAccuracy, RepeatCallbackFormatter formatter) {
     baseWebServerUrl = webServerUrl;
@@ -78,11 +75,11 @@ public class KmlElementFormatter implements ElementFormatter {
   @Override
   public void formatBinary(BlobSubmissionType blobSubmission, FormElementModel element, String ordinalValue, Row row, CallingContext cc)
       throws ODKDatastoreException {
-    if( blobSubmission == null ||
+    if (blobSubmission == null ||
         (blobSubmission.getAttachmentCount(cc) == 0) ||
-        (blobSubmission.getContentHash(1, cc) == null) ) {
-          row.addFormattedValue(null);
-          return;
+        (blobSubmission.getContentHash(1, cc) == null)) {
+      row.addFormattedValue(null);
+      return;
     }
 
     SubmissionKey key = blobSubmission.getValue();
@@ -101,43 +98,55 @@ public class KmlElementFormatter implements ElementFormatter {
   public void formatChoices(List<String> choices, FormElementModel element, String ordinalValue, Row row) {
     StringBuilder b = new StringBuilder();
     boolean first = true;
-    for ( String s : choices ) {
-        if ( !first ) {
-            b.append(" ");
-        }
-        first = false;
-        b.append(s);
+    for (String s : choices) {
+      if (!first) {
+        b.append(" ");
+      }
+      first = false;
+      b.append(s);
     }
     generateDataElement(b.toString(), element.getGroupQualifiedElementName() + ordinalValue, row);
   }
 
   @Override
-  public void formatDate(Date date, FormElementModel element, String ordinalValue, Row row) {
-    generateDataElement(date, element.getGroupQualifiedElementName() + ordinalValue, row);
-  }
-
-  @Override
   public void formatDateTime(Date date, FormElementModel element, String ordinalValue, Row row) {
-    generateDataElement(date, element.getGroupQualifiedElementName() + ordinalValue, row);
-  }
-
-  @Override
-  public void formatTime(Date date, FormElementModel element, String ordinalValue, Row row) {
-    if ( date != null ) {
-      GregorianCalendar g = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
-      g.setTime(date);
-      generateDataElement(String.format(FormatConsts.TIME_FORMAT_STRING,
-                            g.get(Calendar.HOUR_OF_DAY),
-                            g.get(Calendar.MINUTE),
-                            g.get(Calendar.SECOND)), element.getGroupQualifiedElementName() + ordinalValue, row);
-    } else {
-      generateDataElement(null, element.getGroupQualifiedElementName() + ordinalValue, row);
-    }
+    generateDataElement(
+        Optional.ofNullable(date).map(JRTemporal::dateTime).map(JRTemporal::getRaw).orElse(null),
+        element + FormatConsts.HEADER_CONCAT + ordinalValue,
+        row
+    );
   }
 
   @Override
   public void formatDecimal(WrappedBigDecimal dub, FormElementModel element, String ordinalValue, Row row) {
     generateDataElement(dub, element.getGroupQualifiedElementName() + ordinalValue, row);
+  }
+
+  @Override
+  public void formatJRDate(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    generateDataElement(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        element + FormatConsts.HEADER_CONCAT + ordinalValue,
+        row
+    );
+  }
+
+  @Override
+  public void formatJRTime(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    generateDataElement(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        element + FormatConsts.HEADER_CONCAT + ordinalValue,
+        row
+    );
+  }
+
+  @Override
+  public void formatJRDateTime(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    generateDataElement(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        element + FormatConsts.HEADER_CONCAT + ordinalValue,
+        row
+    );
   }
 
   @Override
@@ -168,9 +177,9 @@ public class KmlElementFormatter implements ElementFormatter {
     generateDataElement(string, element.getGroupQualifiedElementName() + ordinalValue, row);
   }
 
-  private void generateDataElement(Object value, String name, Row row){
+  private void generateDataElement(Object value, String name, Row row) {
     String valueAsString = BasicConsts.EMPTY_STRING;
-    if(value != null) {
+    if (value != null) {
       valueAsString = value.toString();
     }
     row.addFormattedValue(String.format(KmlConsts.KML_DATA_ITEM_TEMPLATE, name, valueAsString));

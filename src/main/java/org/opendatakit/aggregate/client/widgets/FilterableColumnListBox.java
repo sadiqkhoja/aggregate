@@ -17,7 +17,6 @@
 package org.opendatakit.aggregate.client.widgets;
 
 import java.util.ArrayList;
-
 import org.opendatakit.aggregate.client.submission.Column;
 import org.opendatakit.aggregate.constants.common.UIDisplayType;
 
@@ -46,7 +45,7 @@ public final class FilterableColumnListBox extends AggregateListBox {
         for (Column column : headers) {
           if (colname.equals(column.getDisplayHeader())
               && colencode.equals(column.getColumnEncoding())) {
-            colgpsIndex = column.getGeopointColumnCode();
+            colgpsIndex = column.getChildColumnCode();
             break;
           }
         }

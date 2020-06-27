@@ -16,8 +16,14 @@
 
 package org.opendatakit.aggregate.client.table;
 
+import com.google.gwt.event.dom.client.ClickEvent;
+import com.google.gwt.event.dom.client.ClickHandler;
+import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
+import com.google.gwt.user.client.ui.Anchor;
+import com.google.gwt.user.client.ui.FlexTable;
+import com.google.gwt.user.client.ui.HTML;
+import com.google.gwt.user.client.ui.Widget;
 import java.util.ArrayList;
-
 import org.opendatakit.aggregate.client.form.FormSummary;
 import org.opendatakit.aggregate.client.popups.MediaFileListPopup;
 import org.opendatakit.aggregate.client.preferences.Preferences;
@@ -29,13 +35,6 @@ import org.opendatakit.aggregate.client.widgets.ExportButton;
 import org.opendatakit.aggregate.client.widgets.PublishButton;
 import org.opendatakit.aggregate.constants.common.FormActionStatusTimestamp;
 import org.opendatakit.common.security.client.UserSecurityInfo;
-
-import com.google.gwt.event.dom.client.ClickEvent;
-import com.google.gwt.event.dom.client.ClickHandler;
-import com.google.gwt.user.client.ui.Anchor;
-import com.google.gwt.user.client.ui.FlexTable;
-import com.google.gwt.user.client.ui.HTML;
-import com.google.gwt.user.client.ui.Widget;
 
 public class FormTable extends FlexTable {
 
@@ -83,8 +82,6 @@ public class FormTable extends FlexTable {
 
   /**
    * Update the list of forms
-   *
-   * @param formSummary
    */
   public void updateFormTable(ArrayList<FormSummary> forms) {
     int i = 0;
@@ -98,8 +95,8 @@ public class FormTable extends FlexTable {
       }
       // ok -- we should show this form...
       ++i;
-      setWidget(i, TITLE_COLUMN, new HTML(form.getViewableURL()));
-      setWidget(i, FORM_ID_COLUMN, new HTML(form.getId()));
+      setWidget(i, TITLE_COLUMN, new HTML(new SafeHtmlBuilder().appendHtmlConstant(form.getViewableURL()).toSafeHtml()));
+      setWidget(i, FORM_ID_COLUMN, new HTML(new SafeHtmlBuilder().appendEscaped(form.getId()).toSafeHtml()));
 
       Widget mediaCount;
       if (form.getMediaFileCount() > 0) {
@@ -107,7 +104,7 @@ public class FormTable extends FlexTable {
         mediaCountLink.addClickHandler(new MediaFileListClickHandler(form.getId()));
         mediaCount = mediaCountLink;
       } else {
-        mediaCount = new HTML(Integer.toString(form.getMediaFileCount()));
+        mediaCount = new HTML(new SafeHtmlBuilder().appendEscaped(Integer.toString(form.getMediaFileCount())).toSafeHtml());
       }
       setWidget(i, MEDIA_COUNT_COLUMN, mediaCount);
 

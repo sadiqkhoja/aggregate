@@ -16,6 +16,17 @@
 
 package org.opendatakit.aggregate.client.popups;
 
+import static org.opendatakit.aggregate.client.security.SecurityUtils.secureRequest;
+
+import com.google.gwt.event.dom.client.ClickEvent;
+import com.google.gwt.event.dom.client.ClickHandler;
+import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
+import com.google.gwt.user.client.Window;
+import com.google.gwt.user.client.rpc.AsyncCallback;
+import com.google.gwt.user.client.ui.Button;
+import com.google.gwt.user.client.ui.DialogBox;
+import com.google.gwt.user.client.ui.FlexTable;
+import com.google.gwt.user.client.ui.HTML;
 import org.opendatakit.aggregate.client.AggregateUI;
 import org.opendatakit.aggregate.client.SecureGWT;
 import org.opendatakit.aggregate.client.filter.FilterGroup;
@@ -26,15 +37,6 @@ import org.opendatakit.aggregate.client.widgets.EnumListBox;
 import org.opendatakit.aggregate.client.widgets.FilterListBox;
 import org.opendatakit.aggregate.constants.common.ExportType;
 import org.opendatakit.aggregate.constants.common.SubTabs;
-
-import com.google.gwt.event.dom.client.ClickEvent;
-import com.google.gwt.event.dom.client.ClickHandler;
-import com.google.gwt.user.client.Window;
-import com.google.gwt.user.client.rpc.AsyncCallback;
-import com.google.gwt.user.client.ui.Button;
-import com.google.gwt.user.client.ui.DialogBox;
-import com.google.gwt.user.client.ui.FlexTable;
-import com.google.gwt.user.client.ui.HTML;
 
 public final class ExportPopup extends AbstractPopupBase {
 
@@ -78,12 +80,12 @@ public final class ExportPopup extends AbstractPopupBase {
 
     fileType = new EnumListBox<ExportType>(ExportType.values(), FILE_TYPE_TOOLTIP,
         FILE_TYPE_BALLOON);
-    
+
     // set the standard header widgets
     optionsBar = new FlexTable();
     optionsBar.addStyleName("stretch_header");
     optionsBar.setWidget(0, 0, new HTML("<h2> Form:</h2>"));
-    optionsBar.setWidget(0, 1, new HTML(formId));
+    optionsBar.setWidget(0, 1, new HTML(new SafeHtmlBuilder().appendEscaped(formId).toSafeHtml()));
     optionsBar.setWidget(0, 2, new HTML("<h2>Type:</h2>"));
     optionsBar.setWidget(0, 3, fileType);
     optionsBar.setWidget(0, 4, new HTML("<h2>Filter:</h2>"));
@@ -93,25 +95,21 @@ public final class ExportPopup extends AbstractPopupBase {
     setWidget(optionsBar);
   }
 
-  private class CreateExportCallback implements AsyncCallback<Boolean> {
+  private static class ErrorDialog extends DialogBox {
 
-    @Override
-    public void onFailure(Throwable caught) {
-      AggregateUI.getUI().reportError(caught);
-    }
-
-    @Override
-    public void onSuccess(Boolean result) {
-      if (result) {
-        AggregateUI.getUI().redirectToSubTab(SubTabs.EXPORT);
-      } else {
-        Window.alert(EXPORT_ERROR_MSG);
-      }
-
-      hide();
+    public ErrorDialog() {
+      setText("Error Unknown Export Type!! Please file an Issue on ODK website!");
+      Button ok = new Button("OK");
+      ok.addClickHandler(new ClickHandler() {
+        public void onClick(ClickEvent event) {
+          ErrorDialog.this.hide();
+        }
+      });
+      setWidget(ok);
     }
   }
 
+  ;
 
   private class FiltersCallback implements AsyncCallback<FilterSet> {
 
@@ -133,25 +131,35 @@ public final class ExportPopup extends AbstractPopupBase {
       // created filter list
       filtersBox.updateFilterDropDown(filterSet);
     }
-  };
+  }
 
   private class CreateExportHandler implements ClickHandler {
     @Override
     public void onClick(ClickEvent event) {
       ExportType type = ExportType.valueOf(fileType.getValue(fileType.getSelectedIndex()));
 
-      FilterGroup filterGroup = filtersBox.getSelectedFilter();
-      
-      if ( filterGroup == null ) {
-        AggregateUI.getUI().reportError(new Throwable(PROBLEM_NULL_FILTER_GROUP));
+      final FilterGroup filterGroup = filtersBox.getSelectedFilter();
+
+      if (filterGroup == null) {
+        onFailure(new Throwable(PROBLEM_NULL_FILTER_GROUP));
         return;
       }
 
       if (type == ExportType.CSV) {
-        SecureGWT.getFormService().createCsvFromFilter(filterGroup, new CreateExportCallback());
+        secureRequest(
+            SecureGWT.getFormService(),
+            (rpc, sc, cb) -> rpc.createCsvFromFilter(filterGroup, cb),
+            this::onSuccess,
+            this::onFailure
+        );
       } else if (type == ExportType.JSONFILE) {
-        SecureGWT.getFormService().createJsonFileFromFilter(filterGroup, new CreateExportCallback());
-      } else if( type == ExportType.KML) {
+        secureRequest(
+            SecureGWT.getFormService(),
+            (rpc, sc, cb) -> rpc.createJsonFileFromFilter(filterGroup, cb),
+            this::onSuccess,
+            this::onFailure
+        );
+      } else if (type == ExportType.KML) {
         KmlOptionsPopup popup = new KmlOptionsPopup(formId, filterGroup);
         popup.setPopupPositionAndShow(popup.getPositionCallBack());
         hide();
@@ -160,19 +168,19 @@ public final class ExportPopup extends AbstractPopupBase {
       }
 
     }
-  }
-  
-  private static class ErrorDialog extends DialogBox {
 
-    public ErrorDialog() {
-      setText("Error Unknown Export Type!! Please file an Issue on ODK website!");
-      Button ok = new Button("OK");
-      ok.addClickHandler(new ClickHandler() {
-        public void onClick(ClickEvent event) {
-          ErrorDialog.this.hide();
-        }
-      });
-      setWidget(ok);
+    private void onFailure(Throwable cause) {
+      AggregateUI.getUI().reportError(cause);
+    }
+
+    private void onSuccess(Boolean result) {
+      if (result) {
+        AggregateUI.getUI().redirectToSubTab(SubTabs.EXPORT);
+      } else {
+        Window.alert(EXPORT_ERROR_MSG);
+      }
+
+      hide();
     }
   }
 }

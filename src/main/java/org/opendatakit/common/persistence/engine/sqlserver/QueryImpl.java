@@ -1,47 +1,40 @@
-/**
- * Copyright (C) 2010 University of Washington
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
+/*
+  Copyright (C) 2010 University of Washington
+  <p>
+  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+  in compliance with the License. You may obtain a copy of the License at
+  <p>
+  http://www.apache.org/licenses/LICENSE-2.0
+  <p>
+  Unless required by applicable law or agreed to in writing, software distributed under the License
+  is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+  or implied. See the License for the specific language governing permissions and limitations under
+  the License.
  */
 package org.opendatakit.common.persistence.engine.sqlserver;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.opendatakit.common.persistence.CommonFieldsBase;
 import org.opendatakit.common.persistence.DataField;
-import org.opendatakit.common.persistence.EntityKey;
 import org.opendatakit.common.persistence.Query;
 import org.opendatakit.common.persistence.QueryResult;
 import org.opendatakit.common.persistence.QueryResumePoint;
 import org.opendatakit.common.persistence.engine.EngineUtils;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.security.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public class QueryImpl implements Query {
 
@@ -54,8 +47,6 @@ public class QueryImpl implements Query {
   private static final String K_FROM = " FROM ";
   private static final String K_WHERE = " WHERE ";
   private static final String K_AND = " AND ";
-  private static final String K_IN_OPEN = " IN (";
-  private static final String K_IN_CLOSE = ")";
   private static final String K_BIND_VALUE = " ? ";
   private static final String K_ORDER_BY = " ORDER BY ";
 
@@ -77,18 +68,15 @@ public class QueryImpl implements Query {
   private final CommonFieldsBase relation;
   private final DatastoreImpl dataStoreImpl;
   private final User user;
-
-  private DataField dominantSortAttr = null;
-  private Direction dominantSortDirection = null;
-  private boolean isSortedByUri = false;
-
   private final StringBuilder queryBindBuilder = new StringBuilder();
   private final List<Object> bindValues = new ArrayList<Object>();
   private final StringBuilder querySortBuilder = new StringBuilder();
   private final Logger queryStringLogger;
+  private DataField dominantSortAttr = null;
+  private Direction dominantSortDirection = null;
+  private boolean isSortedByUri = false;
 
-  public QueryImpl(CommonFieldsBase relation, String loggingContextTag,
-      DatastoreImpl dataStoreImpl, User user) {
+  public QueryImpl(CommonFieldsBase relation, String loggingContextTag, DatastoreImpl dataStoreImpl, User user) {
     this.queryStringLogger = LoggerFactory.getLogger("org.opendatakit.common.persistence.LogQueryString." + relation.getSchemaName() + "." + relation.getTableName());
     this.relation = relation;
     this.dataStoreImpl = dataStoreImpl;
@@ -169,16 +157,7 @@ public class QueryImpl implements Query {
     }
   }
 
-  /**
-   * Constructs the necessary filter clause to append to the Query filters to
-   * support continuation cursors.
-   * 
-   * @param queryContinuationBindBuilder
-   * @param continuationValue
-   * @return the updated bindArgs
-   */
-  private ArrayList<Object> addContinuationFilter(StringBuilder queryContinuationBindBuilder,
-      Object continuationValue) {
+  private ArrayList<Object> addContinuationFilter(StringBuilder queryContinuationBindBuilder, Object continuationValue) {
     if (dominantSortAttr == null) {
       throw new IllegalStateException("unexpected state");
     }
@@ -198,35 +177,12 @@ public class QueryImpl implements Query {
         .equals(Direction.ASCENDING) ? FilterOperation.GREATER_THAN_OR_EQUAL
         : FilterOperation.LESS_THAN_OR_EQUAL));
     queryContinuationBindBuilder.append(K_BIND_VALUE);
-    
+
     ArrayList<Object> values = new ArrayList<Object>();
     values.addAll(bindValues);
     values.add(DatastoreImpl.getBindValue(dominantSortAttr, continuationValue));
-    
-    return values;
-  }
 
-  @Override
-  public void addValueSetFilter(DataField attributeName, Collection<?> valueSet) {
-    if (queryBindBuilder.length() == 0) {
-      queryBindBuilder.append(K_WHERE);
-    } else {
-      queryBindBuilder.append(K_AND);
-    }
-    queryBindBuilder.append(K_BQ);
-    queryBindBuilder.append(attributeName.getName());
-    queryBindBuilder.append(K_BQ);
-    queryBindBuilder.append(K_IN_OPEN);
-    boolean first = true;
-    for (Object o : valueSet) {
-      if (!first) {
-        queryBindBuilder.append(K_CS);
-      }
-      first = false;
-      queryBindBuilder.append(K_BIND_VALUE);
-      bindValues.add(DatastoreImpl.getBindValue(attributeName, o));
-    }
-    queryBindBuilder.append(K_IN_CLOSE);
+    return values;
   }
 
   @Override
@@ -294,80 +250,7 @@ public class QueryImpl implements Query {
   }
 
   @Override
-  public Set<EntityKey> executeForeignKeyQuery(CommonFieldsBase topLevelTable,
-      DataField topLevelAuri) throws ODKDatastoreException {
-
-    List<?> keys = executeDistinctValueForDataField(topLevelAuri);
-
-    Set<EntityKey> keySet = new HashSet<EntityKey>();
-    for (Object o : keys) {
-      String key = (String) o;
-      // we don't have the top level records themselves. Construct the entity
-      // keys
-      // from the supplied relation and the value of the AURI fields in the
-      // records
-      // we do have.
-      keySet.add(new EntityKey(topLevelTable, key));
-    }
-    return keySet;
-  }
-
-  private class CoreResult {
-    final List<CommonFieldsBase> results;
-    final boolean hasMoreResults;
-
-    CoreResult(List<CommonFieldsBase> results, boolean hasMoreResults) {
-      this.results = results;
-      this.hasMoreResults = hasMoreResults;
-    }
-  }
-
-  private class RowMapperFilteredResultSetExtractor implements ResultSetExtractor<CoreResult> {
-
-    private int readCount = 0;
-    private final QueryResumePoint startCursor;
-    private final int fetchLimit;
-    private final RowMapper<? extends CommonFieldsBase> rowMapper;
-
-    RowMapperFilteredResultSetExtractor(QueryResumePoint startCursor, int fetchLimit,
-        RowMapper<? extends CommonFieldsBase> rowMapper) {
-      this.startCursor = startCursor;
-      this.fetchLimit = fetchLimit;
-      this.rowMapper = rowMapper;
-    }
-
-    @Override
-    public CoreResult extractData(ResultSet rs) throws SQLException {
-      boolean hasMoreResults = false;
-      List<CommonFieldsBase> results = new ArrayList<CommonFieldsBase>();
-      String startUri = (startCursor == null) ? null : startCursor.getUriLastReturnedValue();
-      boolean beforeUri = (startUri != null);
-      while (rs.next()) {
-        ++readCount;
-        CommonFieldsBase cb = this.rowMapper.mapRow(rs, results.size());
-        if (beforeUri) {
-          if (startUri.equals(cb.getUri())) {
-            beforeUri = false;
-          }
-        } else if (fetchLimit == 0 || results.size() < fetchLimit) {
-          results.add(cb);
-        } else {
-          hasMoreResults = true;
-          break;
-        }
-      }
-      return new CoreResult(results, hasMoreResults);
-    }
-    
-    public int getReadCount() {
-      return readCount;
-    }
-
-  }
-
-  @Override
-  public QueryResult executeQuery(QueryResumePoint startCursor, int fetchLimit)
-      throws ODKDatastoreException {
+  public QueryResult executeQuery(QueryResumePoint startCursor, int fetchLimit) throws ODKDatastoreException {
 
     // we must have at least one sort column defined
     if (dominantSortDirection == null) {
@@ -450,5 +333,58 @@ public class QueryImpl implements Query {
       e.printStackTrace();
       throw new ODKDatastoreException(e);
     }
+  }
+
+  private class CoreResult {
+    final List<CommonFieldsBase> results;
+    final boolean hasMoreResults;
+
+    CoreResult(List<CommonFieldsBase> results, boolean hasMoreResults) {
+      this.results = results;
+      this.hasMoreResults = hasMoreResults;
+    }
+  }
+
+  private class RowMapperFilteredResultSetExtractor implements ResultSetExtractor<CoreResult> {
+
+    private final QueryResumePoint startCursor;
+    private final int fetchLimit;
+    private final RowMapper<? extends CommonFieldsBase> rowMapper;
+    private int readCount = 0;
+
+    RowMapperFilteredResultSetExtractor(QueryResumePoint startCursor, int fetchLimit,
+                                        RowMapper<? extends CommonFieldsBase> rowMapper) {
+      this.startCursor = startCursor;
+      this.fetchLimit = fetchLimit;
+      this.rowMapper = rowMapper;
+    }
+
+    @Override
+    public CoreResult extractData(ResultSet rs) throws SQLException {
+      boolean hasMoreResults = false;
+      List<CommonFieldsBase> results = new ArrayList<CommonFieldsBase>();
+      String startUri = (startCursor == null) ? null : startCursor.getUriLastReturnedValue();
+      boolean beforeUri = (startUri != null);
+      while (rs.next()) {
+        ++readCount;
+        CommonFieldsBase cb = this.rowMapper.mapRow(rs, results.size());
+        if (beforeUri) {
+          if (startUri.equals(cb.getUri())) {
+            beforeUri = false;
+          }
+        } else if (fetchLimit == 0 || results.size() < fetchLimit) {
+          results.add(cb);
+        } else {
+          hasMoreResults = true;
+          break;
+        }
+      }
+      return new CoreResult(results, hasMoreResults);
+    }
+
+    public int getReadCount() {
+      return readCount;
+    }
+
   }
 }

@@ -15,12 +15,15 @@
  */
 package org.opendatakit.aggregate.format.element;
 
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import java.util.Optional;
 import org.apache.commons.codec.binary.Base64;
 import org.opendatakit.aggregate.constants.HtmlUtil;
 import org.opendatakit.aggregate.constants.ServletConsts;
@@ -33,21 +36,15 @@ import org.opendatakit.aggregate.submission.SubmissionKey;
 import org.opendatakit.aggregate.submission.SubmissionRepeat;
 import org.opendatakit.aggregate.submission.type.BlobSubmissionType;
 import org.opendatakit.aggregate.submission.type.GeoPoint;
+import org.opendatakit.aggregate.submission.type.jr.JRTemporal;
 import org.opendatakit.common.persistence.WrappedBigDecimal;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
-import org.opendatakit.common.utils.WebUtils;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 /**
- *
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- *
  */
 public class JsonElementFormatter implements ElementFormatter {
   private static final String JSON_NULL = "null";
@@ -83,19 +80,15 @@ public class JsonElementFormatter implements ElementFormatter {
   /**
    * Construct a JSON Element Formatter
    *
-   * @param separateGpsCoordinates
-   *          separate the GPS coordinates of latitude and longitude into
-   *          columns
-   * @param includeGpsAltitude
-   *          include GPS altitude data
-   * @param includeGpsAccuracy
-   *          include GPS accuracy data
-   * @param expressMultipleChoiceListsAsArrays
-   *          if true, express the multiple-choice fields as arrays of strings
+   * @param separateGpsCoordinates             separate the GPS coordinates of latitude and longitude into
+   *                                           columns
+   * @param includeGpsAltitude                 include GPS altitude data
+   * @param includeGpsAccuracy                 include GPS accuracy data
+   * @param expressMultipleChoiceListsAsArrays if true, express the multiple-choice fields as arrays of strings
    */
   public JsonElementFormatter(boolean separateGpsCoordinates, boolean includeGpsAltitude,
-      boolean includeGpsAccuracy, boolean expressMultipleChoiceListsAsArrays,
-      RepeatCallbackFormatter formatter) {
+                              boolean includeGpsAccuracy, boolean expressMultipleChoiceListsAsArrays,
+                              RepeatCallbackFormatter formatter) {
     separateCoordinates = separateGpsCoordinates;
     includeAltitude = includeGpsAltitude;
     includeAccuracy = includeGpsAccuracy;
@@ -107,22 +100,17 @@ public class JsonElementFormatter implements ElementFormatter {
   /**
    * Construct a JSON Element Formatter with links
    *
-   * @param webServerUrl
-   *          base url for the web app (e.g.,
-   *          localhost:8080/ODKAggregatePlatform)
-   * @param separateGpsCoordinates
-   *          separate the GPS coordinates of latitude and longitude into
-   *          columns
-   * @param includeGpsAltitude
-   *          include GPS altitude data
-   * @param includeGpsAccuracy
-   *          include GPS accuracy data
-   * @param expressMultipleChoiceListsAsArrays
-   *          if true, express the multiple-choice fields as arrays of strings
+   * @param webServerUrl                       base url for the web app (e.g.,
+   *                                           localhost:8080/ODKAggregatePlatform)
+   * @param separateGpsCoordinates             separate the GPS coordinates of latitude and longitude into
+   *                                           columns
+   * @param includeGpsAltitude                 include GPS altitude data
+   * @param includeGpsAccuracy                 include GPS accuracy data
+   * @param expressMultipleChoiceListsAsArrays if true, express the multiple-choice fields as arrays of strings
    */
   public JsonElementFormatter(String webServerUrl, boolean separateGpsCoordinates,
-      boolean includeGpsAltitude, boolean includeGpsAccuracy,
-      boolean expressMultipleChoiceListsAsArrays, RepeatCallbackFormatter formatter) {
+                              boolean includeGpsAltitude, boolean includeGpsAccuracy,
+                              boolean expressMultipleChoiceListsAsArrays, RepeatCallbackFormatter formatter) {
     this(separateGpsCoordinates, includeGpsAltitude, includeGpsAccuracy,
         expressMultipleChoiceListsAsArrays, formatter);
     baseWebServerUrl = webServerUrl;
@@ -135,7 +123,7 @@ public class JsonElementFormatter implements ElementFormatter {
 
   @Override
   public void formatBinary(BlobSubmissionType blobSubmission, FormElementModel element,
-      String ordinalValue, Row row, CallingContext cc) throws ODKDatastoreException {
+                           String ordinalValue, Row row, CallingContext cc) throws ODKDatastoreException {
     if (blobSubmission == null || (blobSubmission.getAttachmentCount(cc) == 0)
         || (blobSubmission.getContentHash(1, cc) == null)) {
       addToJsonValueToRow(null, true, element.getElementName(), row);
@@ -147,7 +135,7 @@ public class JsonElementFormatter implements ElementFormatter {
       imageBlob = blobSubmission.getBlob(1, cc);
     }
     if (imageBlob != null && imageBlob.length > 0) {
-      Map<String,String> obj = new HashMap<String,String>();
+      Map<String, String> obj = new HashMap<String, String>();
       obj.put("filename", blobSubmission.getUnrootedFilename(1, cc));
       obj.put("type", blobSubmission.getContentType(1, cc));
       if (baseWebServerUrl == null) {
@@ -185,7 +173,7 @@ public class JsonElementFormatter implements ElementFormatter {
 
   @Override
   public void formatChoices(List<String> choices, FormElementModel element, String ordinalValue,
-      Row row) {
+                            Row row) {
     StringBuilder b = new StringBuilder();
 
     if (choices.size() == 0) {
@@ -226,37 +214,53 @@ public class JsonElementFormatter implements ElementFormatter {
   }
 
   @Override
-  public void formatDate(Date date, FormElementModel element, String ordinalValue, Row row) {
-    // date in ISO8601 Javarosa format
-    addToJsonValueToRow((date == null) ? null : WebUtils.asSubmissionDateOnlyString(date), true,
-        element.getElementName(), row);
-
-  }
-
-  @Override
   public void formatDateTime(Date date, FormElementModel element, String ordinalValue, Row row) {
-    // dateTime in ISO8601 Javarosa format
-    addToJsonValueToRow((date == null) ? null : WebUtils.asSubmissionDateTimeString(date), true,
-        element.getElementName(), row);
-
-  }
-
-  @Override
-  public void formatTime(Date date, FormElementModel element, String ordinalValue, Row row) {
-    // time in ISO8601 Javarosa format
-    addToJsonValueToRow((date == null) ? null : WebUtils.asSubmissionTimeOnlyString(date), true,
-        element.getElementName(), row);
+    addToJsonValueToRow(
+        Optional.ofNullable(date).map(JRTemporal::dateTime).map(JRTemporal::getRaw).orElse(null),
+        true,
+        element.getElementName(),
+        row
+    );
   }
 
   @Override
   public void formatDecimal(WrappedBigDecimal dub, FormElementModel element, String ordinalValue, Row row) {
     addToJsonValueToRow(dub, false, element.getElementName(), row);
+  }
 
+  @Override
+  public void formatJRDate(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    addToJsonValueToRow(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        true,
+        element.getElementName(),
+        row
+    );
+  }
+
+  @Override
+  public void formatJRTime(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    addToJsonValueToRow(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        true,
+        element.getElementName(),
+        row
+    );
+  }
+
+  @Override
+  public void formatJRDateTime(JRTemporal value, FormElementModel element, String ordinalValue, Row row) {
+    addToJsonValueToRow(
+        Optional.ofNullable(value).map(JRTemporal::getRaw).orElse(null),
+        true,
+        element.getElementName(),
+        row
+    );
   }
 
   @Override
   public void formatGeoPoint(GeoPoint coordinate, FormElementModel element, String ordinalValue,
-      Row row) {
+                             Row row) {
     if (separateCoordinates) {
       addToJsonValueToRow(coordinate.getLatitude(), false, element.getElementName()
           + FormatConsts.HEADER_CONCAT + GeoPoint.LATITUDE, row);
@@ -299,7 +303,7 @@ public class JsonElementFormatter implements ElementFormatter {
 
   @Override
   public void formatRepeats(SubmissionRepeat repeat, FormElementModel repeatElement, Row row,
-      CallingContext cc) throws ODKDatastoreException {
+                            CallingContext cc) throws ODKDatastoreException {
     callbackFormatter.processRepeatedSubmssionSetsIntoRow(repeat.getSubmissionSets(),
         repeatElement, row, cc);
   }

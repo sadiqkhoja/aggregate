@@ -25,22 +25,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-
-import org.opendatakit.aggregate.odktables.rest.entity.PrivilegesInfo;
-import org.opendatakit.aggregate.odktables.rest.entity.UserInfo;
 import org.opendatakit.common.persistence.CommonFieldsBase;
 import org.opendatakit.common.persistence.Datastore;
 import org.opendatakit.common.persistence.Query;
 import org.opendatakit.common.persistence.client.exception.DatastoreFailureException;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.security.SecurityBeanDefs;
-import org.opendatakit.common.security.SecurityUtils;
 import org.opendatakit.common.security.User;
 import org.opendatakit.common.security.client.CredentialsInfo;
 import org.opendatakit.common.security.client.UserSecurityInfo;
 import org.opendatakit.common.security.client.UserSecurityInfo.UserType;
 import org.opendatakit.common.security.client.exception.AccessDeniedException;
-import org.opendatakit.common.security.common.EmailParser;
 import org.opendatakit.common.security.common.GrantedAuthorityName;
 import org.opendatakit.common.security.spring.GrantedAuthorityHierarchyTable;
 import org.opendatakit.common.security.spring.RegisteredUsersTable;
@@ -57,74 +52,29 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
  * can be shared between the servlet and GWT server classes.
  *
  * @author mitchellsundt@gmail.com
- *
  */
 public class SecurityServiceUtil {
 
-  private static final Set<String> specialNames = new HashSet<String>();
-
-  public static final GrantedAuthority siteAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_SITE_ADMINS.name());
+  public static final GrantedAuthority siteAuth = new SimpleGrantedAuthority(GrantedAuthorityName.GROUP_SITE_ADMINS.name());
   public static final List<String> siteAdministratorGrants;
-
-  public static final GrantedAuthority dataOwnerAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_FORM_MANAGERS.name());
+  public static final GrantedAuthority dataOwnerAuth = new SimpleGrantedAuthority(GrantedAuthorityName.GROUP_FORM_MANAGERS.name());
   public static final List<String> dataOwnerGrants;
-
-  public static final GrantedAuthority administerTablesAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_ADMINISTER_TABLES.name());
-  public static final List<String> administerTablesGrants;
-
-  public static final GrantedAuthority superUserTablesAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_SUPER_USER_TABLES.name());
-  public static final List<String> superUserTablesGrants;
-
-  public static final GrantedAuthority synchronizeTablesAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_SYNCHRONIZE_TABLES.name());
-  public static final List<String> synchronizeTablesGrants;
-
-  public static final GrantedAuthority dataViewerAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_DATA_VIEWERS.name());
+  public static final GrantedAuthority dataViewerAuth = new SimpleGrantedAuthority(GrantedAuthorityName.GROUP_DATA_VIEWERS.name());
   public static final List<String> dataViewerGrants;
-
-  public static final GrantedAuthority dataCollectorAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.GROUP_DATA_COLLECTORS.name());
+  public static final GrantedAuthority dataCollectorAuth = new SimpleGrantedAuthority(GrantedAuthorityName.GROUP_DATA_COLLECTORS.name());
   public static final List<String> dataCollectorGrants;
-
-  public static final GrantedAuthority anonAuth = new SimpleGrantedAuthority(
-      GrantedAuthorityName.USER_IS_ANONYMOUS.name());
+  public static final GrantedAuthority anonAuth = new SimpleGrantedAuthority(GrantedAuthorityName.USER_IS_ANONYMOUS.name());
   // special grants for Google Earth work-around
   public static final List<String> anonAttachmentViewerGrants;
 
-  public static final Set<GrantedAuthority> tablesExclusions;
-  
   static {
     List<String> isiteAdministratorGrants = new ArrayList<String>();
     isiteAdministratorGrants.add(GrantedAuthorityName.ROLE_USER.name());
     isiteAdministratorGrants.add(GrantedAuthorityName.ROLE_SITE_ACCESS_ADMIN.name());
-    isiteAdministratorGrants.add(GrantedAuthorityName.GROUP_ADMINISTER_TABLES.name());
-    isiteAdministratorGrants.add(GrantedAuthorityName.GROUP_SYNCHRONIZE_TABLES.name());
     isiteAdministratorGrants.add(GrantedAuthorityName.GROUP_FORM_MANAGERS.name());
     isiteAdministratorGrants.add(GrantedAuthorityName.GROUP_DATA_VIEWERS.name());
     siteAdministratorGrants = Collections.unmodifiableList(isiteAdministratorGrants);
 
-    List<String> iadministerTablesGrants = new ArrayList<String>();
-    iadministerTablesGrants.add(GrantedAuthorityName.ROLE_USER.name());
-    iadministerTablesGrants.add(GrantedAuthorityName.ROLE_ADMINISTER_TABLES.name());
-    iadministerTablesGrants.add(GrantedAuthorityName.GROUP_SUPER_USER_TABLES.name());
-    administerTablesGrants = Collections.unmodifiableList(iadministerTablesGrants);
-
-
-    List<String> isuperUserTablesGrants = new ArrayList<String>();
-    isuperUserTablesGrants.add(GrantedAuthorityName.ROLE_USER.name());
-    isuperUserTablesGrants.add(GrantedAuthorityName.ROLE_SUPER_USER_TABLES.name());
-    isuperUserTablesGrants.add(GrantedAuthorityName.GROUP_SYNCHRONIZE_TABLES.name());
-    superUserTablesGrants = Collections.unmodifiableList(isuperUserTablesGrants);
-
-    List<String> isynchronizeTablesGrants = new ArrayList<String>();
-    isynchronizeTablesGrants.add(GrantedAuthorityName.ROLE_USER.name());
-    isynchronizeTablesGrants.add(GrantedAuthorityName.ROLE_SYNCHRONIZE_TABLES.name());
-    synchronizeTablesGrants = Collections.unmodifiableList(isynchronizeTablesGrants);
 
     List<String> idataOwnerGrants = new ArrayList<String>();
     idataOwnerGrants.add(GrantedAuthorityName.ROLE_USER.name());
@@ -145,147 +95,9 @@ public class SecurityServiceUtil {
     List<String> ianonAttachmentViewerGrants = new ArrayList<String>();
     ianonAttachmentViewerGrants.add(GrantedAuthorityName.ROLE_ATTACHMENT_VIEWER.name());
     anonAttachmentViewerGrants = Collections.unmodifiableList(ianonAttachmentViewerGrants);
-    
-    // after we complete the set of roles and groups, exclude these from ODK Tables REST APIs
-    Set<GrantedAuthority> odkTablesExclusions = new HashSet<GrantedAuthority>();
-    odkTablesExclusions.add(siteAuth);
-    odkTablesExclusions.add(administerTablesAuth);
-    odkTablesExclusions.add(superUserTablesAuth);
-    odkTablesExclusions.add(synchronizeTablesAuth);
-    odkTablesExclusions.add(new SimpleGrantedAuthority(
-              GrantedAuthorityName.ROLE_DATA_OWNER.name()));
-    odkTablesExclusions.add(new SimpleGrantedAuthority(
-          GrantedAuthorityName.ROLE_DATA_VIEWER.name()));
-    odkTablesExclusions.add(new SimpleGrantedAuthority(
-          GrantedAuthorityName.ROLE_DATA_COLLECTOR.name()));
-    tablesExclusions = Collections.unmodifiableSet(odkTablesExclusions);
   }
 
-  private static final class UserIdFullName {
-    final String user_id;
-    final String full_name;
-    
-    UserIdFullName(UserSecurityInfo userSecurityInfo) {
-      if ( userSecurityInfo.getType() == UserType.ANONYMOUS ) {
-        user_id = "anonymous"; 
-        full_name = User.ANONYMOUS_USER_NICKNAME;
-      } else if ( userSecurityInfo.getEmail() == null ) {
-        user_id = "username:" + userSecurityInfo.getUsername(); 
-        if ( userSecurityInfo.getFullName() == null ) {
-          full_name = userSecurityInfo.getUsername();
-        } else {
-          full_name = userSecurityInfo.getFullName();
-        }
-      } else {
-        // already has the mailto: prefix
-        user_id = userSecurityInfo.getEmail(); 
-        if ( userSecurityInfo.getFullName() == null ) {
-          full_name = userSecurityInfo.getEmail().substring(EmailParser.K_MAILTO.length());
-        } else {
-          full_name = userSecurityInfo.getFullName();
-        }
-      }
-    }
-    
-    UserIdFullName(CallingContext cc, User user) throws ODKDatastoreException {
-      if ( user.isAnonymous() ) {
-        user_id = "anonymous";
-        full_name = User.ANONYMOUS_USER_NICKNAME;
-      } else if ( user.getEmail() == null ) {
-        // TODO: fix this in Aggregate back-port
-        RegisteredUsersTable entry;
-        entry = RegisteredUsersTable.getUserByUri(user.getUriUser(), cc.getDatastore(), cc.getCurrentUser());
-        user_id = "username:" + entry.getUsername();
-        if ( user.getNickname() == null ) {
-          full_name = entry.getUsername();
-        } else {
-          full_name = user.getNickname();
-        }
-      } else {
-        user_id = user.getEmail();
-        if ( user.getNickname() == null ) {
-          full_name = user.getEmail().substring(EmailParser.K_MAILTO.length());
-        } else {
-          full_name = user.getNickname();
-        }
-      }
-
-    }
-  }
-  private static final ArrayList<String> processRoles(Set<GrantedAuthority> grants) {
-    ArrayList<String> roleNames = new ArrayList<String>();
-    for ( GrantedAuthority grant : grants ) {
-      roleNames.add(grant.getAuthority());
-    }
-    Collections.sort(roleNames);
-    return roleNames;
-  }
-
-  /**
-   * Constructor to extract content from UserSecurityInfo
-   * 
-   * @param userSecurityInfo
-   */
-  public static final UserInfo createUserInfo(CallingContext cc, UserSecurityInfo userSecurityInfo) {
-    ArrayList<String> roles;
-    
-    UserIdFullName fields = new UserIdFullName(userSecurityInfo);
-    RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
-    Set<GrantedAuthority> grants = new HashSet<GrantedAuthority>();
-    for ( GrantedAuthorityName grant : userSecurityInfo.getGrantedAuthorities()) {
-        grants.add(new SimpleGrantedAuthority(grant.name()));
-    }
-    for ( GrantedAuthorityName grant : userSecurityInfo.getAssignedUserGroups()) {
-        grants.add(new SimpleGrantedAuthority(grant.name()));
-    }
-    Collection<? extends GrantedAuthority> auths = hierarchy.getReachableGrantedAuthorities(grants);
-    grants.addAll(auths);
-    grants.removeAll(tablesExclusions);
-
-    roles = processRoles(grants);
-    
-    return new UserInfo(fields.user_id, fields.full_name, roles);
-  }
-  
-  public static PrivilegesInfo getRolesAndDefaultGroup(CallingContext cc) throws ODKDatastoreException {
-    
-    User user = cc.getCurrentUser();
-    Set<GrantedAuthority> grants = new HashSet<GrantedAuthority>();
-    grants.addAll(user.getAuthorities());
-    RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
-    Collection<? extends GrantedAuthority> auths = hierarchy.getReachableGrantedAuthorities(user.getDirectAuthorities());
-    grants.addAll(auths);
-    grants.removeAll(tablesExclusions);
-    
-    String defaultGroup = null;
-    boolean matchesMembershipGroup = (defaultGroup == null);
-    
-    ArrayList<String> roleNames = new ArrayList<String>();
-    for ( GrantedAuthority a : grants ) {
-      String authName = a.getAuthority();
-      roleNames.add(authName);
-      matchesMembershipGroup = matchesMembershipGroup || authName.equals(defaultGroup);
-    }
-    Collections.sort(roleNames);
-    UserIdFullName fields = new UserIdFullName(cc, user);
-
-    PrivilegesInfo info = new PrivilegesInfo(fields.user_id, fields.full_name, 
-        roleNames, (matchesMembershipGroup ? defaultGroup : null));
-    
-    return info;
-  }
-
-  /**
-   * Return all registered users and the Anonymous user.
-   *
-   * @param withAuthorities
-   * @param cc
-   * @return
-   * @throws AccessDeniedException
-   * @throws DatastoreFailureException
-   */
-  public static ArrayList<UserSecurityInfo> getAllUsers(boolean withAuthorities, CallingContext cc)
-      throws AccessDeniedException, DatastoreFailureException {
+  public static ArrayList<UserSecurityInfo> getAllUsers(boolean withAuthorities, CallingContext cc) throws DatastoreFailureException {
 
     ArrayList<UserSecurityInfo> users = new ArrayList<UserSecurityInfo>();
     try {
@@ -320,42 +132,6 @@ public class SecurityServiceUtil {
     return users;
   }
 
-  public static HashMap<String, UserSecurityInfo> getUriUserSecurityInfoMap(
-      boolean withAuthorities, CallingContext cc) throws AccessDeniedException,
-      DatastoreFailureException {
-
-    HashMap<String, UserSecurityInfo> users = new HashMap<String, UserSecurityInfo>();
-    try {
-      Query q = RegisteredUsersTable.createQuery(cc.getDatastore(),
-          "SecurityServiceUtil.getAllUsers", cc.getCurrentUser());
-      RegisteredUsersTable.applyNaturalOrdering(q, cc);
-
-      List<? extends CommonFieldsBase> l = q.executeQuery();
-
-      for (CommonFieldsBase cb : l) {
-        RegisteredUsersTable t = (RegisteredUsersTable) cb;
-        UserSecurityInfo i = new UserSecurityInfo(t.getUsername(), t.getFullName(), t.getEmail(),
-            UserSecurityInfo.UserType.REGISTERED);
-        if (withAuthorities) {
-          SecurityServiceUtil.setAuthenticationLists(i, t.getUri(), cc);
-        }
-        users.put(t.getUri(), i);
-      }
-      // TODO: why doesn't this work?
-      UserSecurityInfo anonymous = new UserSecurityInfo(User.ANONYMOUS_USER,
-          User.ANONYMOUS_USER_NICKNAME, null, UserSecurityInfo.UserType.ANONYMOUS);
-      if (withAuthorities) {
-        SecurityServiceUtil.setAuthenticationListsForSpecialUser(anonymous,
-            GrantedAuthorityName.USER_IS_ANONYMOUS, cc);
-      }
-      users.put(User.ANONYMOUS_USER, anonymous);
-    } catch (ODKDatastoreException e) {
-      e.printStackTrace();
-      throw new DatastoreFailureException(e);
-    }
-    return users;
-  }
-
   static GrantedAuthorityName mapName(GrantedAuthority auth, Set<GrantedAuthority> badGrants) {
     GrantedAuthorityName name = null;
     try {
@@ -366,29 +142,19 @@ public class SecurityServiceUtil {
     return name;
   }
 
-  /**
-   * During upgrades or other operations, we may change the set of granted
-   * authorities (the valid set are identified by GrantedAuthorityNames). Remove
-   * the bad grants wherever we find them...
-   *
-   * @param badGrants
-   * @throws ODKDatastoreException
-   */
-  static void removeBadGrantedAuthorities(Set<GrantedAuthority> badGrants, CallingContext cc)
-      throws ODKDatastoreException {
+  static void removeBadGrantedAuthorities(Set<GrantedAuthority> badGrants, CallingContext cc) throws ODKDatastoreException {
     ArrayList<String> empty = new ArrayList<String>();
     for (GrantedAuthority auth : badGrants) {
       UserGrantedAuthority.assertGrantedAuthorityMembers(auth, empty, cc);
     }
   }
 
-  static void setAuthenticationLists(UserSecurityInfo userInfo, String uriUser, CallingContext cc)
-      throws ODKDatastoreException {
+  static void setAuthenticationLists(UserSecurityInfo userInfo, String uriUser, CallingContext cc) throws ODKDatastoreException {
     Datastore ds = cc.getDatastore();
     User user = cc.getCurrentUser();
     RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
     Set<GrantedAuthority> grants = UserGrantedAuthority.getGrantedAuthorities(uriUser, ds, user);
-    Set<GrantedAuthority> badGrants = new TreeSet<GrantedAuthority>();
+    Set<GrantedAuthority> badGrants = new HashSet<>();
     TreeSet<GrantedAuthorityName> groups = new TreeSet<GrantedAuthorityName>();
     TreeSet<GrantedAuthorityName> authorities = new TreeSet<GrantedAuthorityName>();
     for (GrantedAuthority grant : grants) {
@@ -413,10 +179,9 @@ public class SecurityServiceUtil {
     removeBadGrantedAuthorities(badGrants, cc);
   }
 
-  public static void setAuthenticationListsForSpecialUser(UserSecurityInfo userInfo,
-      GrantedAuthorityName specialGroup, CallingContext cc) throws DatastoreFailureException {
+  public static void setAuthenticationListsForSpecialUser(UserSecurityInfo userInfo, GrantedAuthorityName specialGroup, CallingContext cc) throws DatastoreFailureException {
     RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
-    Set<GrantedAuthority> badGrants = new TreeSet<GrantedAuthority>();
+    Set<GrantedAuthority> badGrants = new HashSet<>();
     // The assigned groups are the specialGroup that this user defines
     // (i.e., anonymous or daemon) plus all directly-assigned assignable
     // permissions.
@@ -456,108 +221,7 @@ public class SecurityServiceUtil {
     }
   }
 
-  /**
-   * Get the complete set of granted authorities (ROLE and RUN_AS grants) this user possesses.
-   * 
-   * @param cc
-   * @return
-   * @throws ODKDatastoreException
-   */
-  public static TreeSet<GrantedAuthorityName> getCurrentUserSecurityInfo(CallingContext cc)
-      throws ODKDatastoreException {
-    User user = cc.getCurrentUser();
-    TreeSet<GrantedAuthorityName> authorities = new TreeSet<GrantedAuthorityName>();
-    if (user.isAnonymous()) {
-      RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
-      Set<GrantedAuthority> badGrants = new TreeSet<GrantedAuthority>();
-      // The assigned groups are the specialGroup that this user defines
-      // (i.e., anonymous or daemon) plus all directly-assigned assignable
-      // permissions.
-      GrantedAuthority specialAuth = new SimpleGrantedAuthority(GrantedAuthorityName.USER_IS_ANONYMOUS.name());
-
-      Collection<? extends GrantedAuthority> auths = hierarchy
-          .getReachableGrantedAuthorities(Collections.singletonList(specialAuth));
-      for (GrantedAuthority auth : auths) {
-        GrantedAuthorityName name = mapName(auth, badGrants);
-        if (name != null && !GrantedAuthorityName.permissionsCanBeAssigned(auth.getAuthority())) {
-          authorities.add(name);
-        }
-      }
-      removeBadGrantedAuthorities(badGrants, cc);
-    } else {
-      RegisteredUsersTable t;
-      t = RegisteredUsersTable.getUserByUri(user.getUriUser(), cc.getDatastore(), user);
-
-      Datastore ds = cc.getDatastore();
-      RoleHierarchy hierarchy = (RoleHierarchy) cc.getBean("hierarchicalRoleRelationships");
-      Set<GrantedAuthority> grants = UserGrantedAuthority.getGrantedAuthorities(user.getUriUser(), ds, user);
-      Set<GrantedAuthority> badGrants = new TreeSet<GrantedAuthority>();
-      TreeSet<GrantedAuthorityName> groups = new TreeSet<GrantedAuthorityName>();
-      for (GrantedAuthority grant : grants) {
-        GrantedAuthorityName name = mapName(grant, badGrants);
-        if (name != null) {
-          if (GrantedAuthorityName.permissionsCanBeAssigned(grant.getAuthority())) {
-            groups.add(name);
-          } else {
-            authorities.add(name);
-          }
-        }
-      }
-      Collection<? extends GrantedAuthority> auths = hierarchy.getReachableGrantedAuthorities(grants);
-      for (GrantedAuthority auth : auths) {
-        GrantedAuthorityName name = mapName(auth, badGrants);
-        if (name != null && !GrantedAuthorityName.permissionsCanBeAssigned(auth.getAuthority())) {
-          authorities.add(name);
-        }
-      }
-      removeBadGrantedAuthorities(badGrants, cc);
-    }
-    return authorities;
-  }
-
-  public static final synchronized boolean isSpecialName(String authority) {
-    if (SecurityServiceUtil.specialNames.isEmpty()) {
-      for (GrantedAuthorityName n : GrantedAuthorityName.values()) {
-        SecurityServiceUtil.specialNames.add(n.name());
-      }
-    }
-
-    return SecurityServiceUtil.specialNames.contains(authority)
-        || authority.startsWith(GrantedAuthorityName.RUN_AS_PREFIX)
-        || authority.startsWith(GrantedAuthorityName.ROLE_PREFIX);
-  }
-
-  /**
-   * Construct and return the Email object for the superUser.
-   *
-   * @param cc
-   * @return
-   */
-  public static final EmailParser.Email getSuperUserEmail(CallingContext cc) {
-    String suEmail = cc.getUserService().getSuperUserEmail();
-    if ( suEmail == null ) {
-      return null;
-    }
-    return new EmailParser.Email(suEmail.substring(SecurityUtils.MAILTO_COLON.length(),
-        suEmail.indexOf(SecurityUtils.AT_SIGN)), suEmail);
-  }
-
-  /**
-   * Given a collection of users, ensure that each user is a registered user
-   * (creating a registered user if one doesn't exist). </p>
-   * <p>
-   * The collection is assumed to be exhaustive. Users not in the list will be
-   * deleted.
-   * </p>
-   *
-   * @param users
-   * @param cc
-   * @return map of users to their Uri strings
-   * @throws DatastoreFailureException
-   * @throws AccessDeniedException
-   */
-  private static Map<UserSecurityInfo, String> setUsers(ArrayList<UserSecurityInfo> users,
-      CallingContext cc) throws DatastoreFailureException, AccessDeniedException {
+  private static Map<UserSecurityInfo, String> setUsers(ArrayList<UserSecurityInfo> users, CallingContext cc) throws DatastoreFailureException {
     List<UserSecurityInfo> allUsersList = getAllUsers(false, cc);
 
     Set<UserSecurityInfo> removedUsers = new TreeSet<UserSecurityInfo>();
@@ -599,25 +263,8 @@ public class SecurityServiceUtil {
     return pkMap;
   }
 
-  /**
-   * Given a collection of users, ensure that each user is a registered user
-   * (creating a registered user if one doesn't exist) and assign those users to
-   * the granted authority.
-   * <p>
-   * The collection is assumed to be exhaustive. If there are other e-mails
-   * already assigned to the granted authority, they will be removed so that
-   * exactly the passed-in set of users are assigned to the authority, no more,
-   * no less.
-   * </p>
-   *
-   * @param users
-   * @param auth
-   * @param cc
-   * @throws DatastoreFailureException
-   */
-  private static void setUsersOfGrantedAuthority(Map<UserSecurityInfo, String> pkMap,
-      GrantedAuthority auth, CallingContext cc) throws DatastoreFailureException {
-    Set<GrantedAuthority> badGrants = new TreeSet<GrantedAuthority>();
+  private static void setUsersOfGrantedAuthority(Map<UserSecurityInfo, String> pkMap, GrantedAuthority auth, CallingContext cc) throws DatastoreFailureException {
+    Set<GrantedAuthority> badGrants = new HashSet<>();
     GrantedAuthorityName name = mapName(auth, badGrants);
     if (name != null) {
       // build the set of uriUsers for this granted authority...
@@ -650,27 +297,11 @@ public class SecurityServiceUtil {
     }
   }
 
-  /**
-   * Method to enforce an access configuration constraining only registered
-   * users, authenticated users and anonymous access.
-   * 
-   * Add additional checks of the incoming parameters and patch things up
-   * if the incoming list of users omits the super-user.
-   * 
-   * @param users
-   * @param anonGrants
-   * @param allGroups
-   * @param cc
-   * @throws DatastoreFailureException
-   * @throws AccessDeniedException
-   */
-  public static final void setStandardSiteAccessConfiguration(ArrayList<UserSecurityInfo> users,
-      ArrayList<GrantedAuthorityName> allGroups, CallingContext cc)
-      throws DatastoreFailureException, AccessDeniedException {
+  public static final void setStandardSiteAccessConfiguration(ArrayList<UserSecurityInfo> users, ArrayList<GrantedAuthorityName> allGroups, CallingContext cc) throws DatastoreFailureException {
 
-    // remove anonymousUser from the set of users and collect its 
-    // permissions (anonGrantStrings) which will be placed in 
-    // the granted authority hierarchy table. 
+    // remove anonymousUser from the set of users and collect its
+    // permissions (anonGrantStrings) which will be placed in
+    // the granted authority hierarchy table.
     List<String> anonGrantStrings = new ArrayList<String>();
     {
       UserSecurityInfo anonUser = null;
@@ -678,7 +309,7 @@ public class SecurityServiceUtil {
         if (i.getType() == UserType.ANONYMOUS) {
           anonUser = i;
           // clean up grants for anonymousUser --
-          // ignore anonAuth (the grant under which we will place things) 
+          // ignore anonAuth (the grant under which we will place things)
           // and forbid Site Admin
           for (GrantedAuthorityName a : i.getAssignedUserGroups()) {
             if (anonAuth.getAuthority().equals(a.name()))
@@ -693,22 +324,20 @@ public class SecurityServiceUtil {
             // those all give access to the full set of users on the system
             // and giving that information to Anonymous is a security
             // risk.
-            if (GrantedAuthorityName.GROUP_SITE_ADMINS.equals(a) ||
-                GrantedAuthorityName.GROUP_ADMINISTER_TABLES.equals(a) ||
-                GrantedAuthorityName.GROUP_SUPER_USER_TABLES.equals(a)) {
-              continue; 
+            if (GrantedAuthorityName.GROUP_SITE_ADMINS.equals(a)) {
+              continue;
             }
             anonGrantStrings.add(a.name());
           }
           break;
         }
       }
-      if (anonUser != null ) {
+      if (anonUser != null) {
         users.remove(anonUser);
       }
     }
 
-    // scan through the users and remove any entries under assigned user groups 
+    // scan through the users and remove any entries under assigned user groups
     // that do not begin with GROUP_.
     //
     // Additionally, if the user is an e-mail, remove the GROUP_DATA_COLLECTORS
@@ -720,21 +349,21 @@ public class SecurityServiceUtil {
         if (i.getType() != UserType.REGISTERED) {
           continue;
         }
-        // get the list of assigned groups 
+        // get the list of assigned groups
         // -- this is not a copy -- we can directly manipulate this.
         TreeSet<GrantedAuthorityName> assignedGroups = i.getAssignedUserGroups();
 
         // scan the set of assigned groups and remove any that don't begin with GROUP_
         toRemove.clear();
-        for ( GrantedAuthorityName name : assignedGroups ) {
-          if ( !name.name().startsWith(GrantedAuthorityName.GROUP_PREFIX) ) {
+        for (GrantedAuthorityName name : assignedGroups) {
+          if (!name.name().startsWith(GrantedAuthorityName.GROUP_PREFIX)) {
             toRemove.add(name);
           }
         }
-        if ( !toRemove.isEmpty() ) {
+        if (!toRemove.isEmpty()) {
           assignedGroups.removeAll(toRemove);
         }
-        // for e-mail accounts, remove the Data Collector permission since ODK Collect 
+        // for e-mail accounts, remove the Data Collector permission since ODK Collect
         // does not support an oauth2 authentication mechanism.
         if (i.getEmail() != null) {
           assignedGroups.remove(GrantedAuthorityName.GROUP_DATA_COLLECTORS);
@@ -747,23 +376,23 @@ public class SecurityServiceUtil {
     String superUserUsername = cc.getUserService().getSuperUserUsername();
     int expectedSize = ((superUserEmail != null) ? 1 : 0) + ((superUserUsername != null) ? 1 : 0);
     ArrayList<UserSecurityInfo> superUsers = new ArrayList<UserSecurityInfo>();
-    for ( UserSecurityInfo i : users ) {
-      if ( i.getType() == UserType.REGISTERED ) {
-        if ( i.getEmail() != null && superUserEmail != null && i.getEmail().equals(superUserEmail)) {
+    for (UserSecurityInfo i : users) {
+      if (i.getType() == UserType.REGISTERED) {
+        if (i.getEmail() != null && superUserEmail != null && i.getEmail().equals(superUserEmail)) {
           superUsers.add(i);
         }
-        if ( i.getUsername() != null && superUserUsername != null && i.getUsername().equals(superUserUsername)) {
+        if (i.getUsername() != null && superUserUsername != null && i.getUsername().equals(superUserUsername)) {
           superUsers.add(i);
         }
       }
     }
-    
-    if ( superUsers.size() != expectedSize ) {
+
+    if (superUsers.size() != expectedSize) {
       // we are missing one or both super-users.
       // remove any we have and recreate them from scratch.
       users.removeAll(superUsers);
       superUsers.clear();
-      
+
       // Synthesize a UserSecurityInfo object for the super-user(s)
       // and add it(them) to the list.
       MessageDigestPasswordEncoder mde = null;
@@ -777,41 +406,35 @@ public class SecurityServiceUtil {
       }
       try {
         List<RegisteredUsersTable> tList = RegisteredUsersTable.assertSuperUsers(mde, cc);
-        
-        for ( RegisteredUsersTable t : tList ) {
+
+        for (RegisteredUsersTable t : tList) {
           UserSecurityInfo i = new UserSecurityInfo(t.getUsername(), t.getFullName(), t.getEmail(),
               UserSecurityInfo.UserType.REGISTERED);
           superUsers.add(i);
           users.add(i);
         }
-        
+
       } catch (ODKDatastoreException e) {
         e.printStackTrace();
         throw new DatastoreFailureException("Incomplete update");
       }
     }
-    
+
     // reset super-user privileges to have (just) site admin privileges
     // even if caller attempts to change, add, or remove them.
-    for ( UserSecurityInfo i : superUsers ) {
+    for (UserSecurityInfo i : superUsers) {
       TreeSet<GrantedAuthorityName> grants = new TreeSet<GrantedAuthorityName>();
       grants.add(GrantedAuthorityName.GROUP_SITE_ADMINS);
       grants.add(GrantedAuthorityName.ROLE_SITE_ACCESS_ADMIN);
       // override whatever the user gave us.
       i.setAssignedUserGroups(grants);
     }
-    
+
     try {
       // enforce our fixed set of groups and their inclusion hierarchy.
       // this is generally a no-op during normal operations.
       GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(siteAuth,
           SecurityServiceUtil.siteAdministratorGrants, cc);
-      GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(administerTablesAuth,
-          SecurityServiceUtil.administerTablesGrants, cc);
-      GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(superUserTablesAuth,
-          SecurityServiceUtil.superUserTablesGrants, cc);
-      GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(synchronizeTablesAuth,
-          SecurityServiceUtil.synchronizeTablesGrants, cc);
       GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(dataOwnerAuth,
           SecurityServiceUtil.dataOwnerGrants, cc);
       GrantedAuthorityHierarchyTable.assertGrantedAuthorityHierarchy(dataViewerAuth,
@@ -828,15 +451,12 @@ public class SecurityServiceUtil {
           .getAllPermissionsAssignableGrantedAuthorities(cc.getDatastore(), cc.getCurrentUser());
       // remove the groups that have structure (i.e., those defined above).
       authorities.remove(siteAuth.getAuthority());
-      authorities.remove(administerTablesAuth.getAuthority());
-      authorities.remove(superUserTablesAuth.getAuthority());
-      authorities.remove(synchronizeTablesAuth.getAuthority());
       authorities.remove(dataOwnerAuth.getAuthority());
       authorities.remove(dataViewerAuth.getAuthority());
       authorities.remove(dataCollectorAuth.getAuthority());
       authorities.remove(anonAuth.getAuthority());
 
-      // delete all hierarchy structures under anything else. 
+      // delete all hierarchy structures under anything else.
       // i.e., if somehow USER_IS_REGISTERED had been granted GROUP_FORM_MANAGER
       // then this loop would leave USER_IS_REGISTERED without any grants.
       // (it repairs the database to conform to our privilege hierarchy expectations).
@@ -852,15 +472,12 @@ public class SecurityServiceUtil {
       // now, for each GROUP_..., update the user granted authority
       // table with the users that have that GROUP_... assignment.
       setUsersOfGrantedAuthority(pkMap, siteAuth, cc);
-      setUsersOfGrantedAuthority(pkMap, administerTablesAuth, cc);
-      setUsersOfGrantedAuthority(pkMap, superUserTablesAuth, cc);
-      setUsersOfGrantedAuthority(pkMap, synchronizeTablesAuth, cc);
       setUsersOfGrantedAuthority(pkMap, dataOwnerAuth, cc);
       setUsersOfGrantedAuthority(pkMap, dataViewerAuth, cc);
       setUsersOfGrantedAuthority(pkMap, dataCollectorAuth, cc);
       // all super-users would already have their site admin role and
-      // we leave that unchanged. The key is to ensure that the 
-      // super users are in the users list so they don't get 
+      // we leave that unchanged. The key is to ensure that the
+      // super users are in the users list so they don't get
       // accidentally removed and that they have siteAuth group
       // membership.  I.e., we don't need to manage ROLE_SITE_ACCESS_ADMIN
       // here. it is done elsewhere.
@@ -886,8 +503,7 @@ public class SecurityServiceUtil {
     }
   }
 
-  public static final void setUserCredentials(CredentialsInfo credential, CallingContext cc)
-      throws AccessDeniedException, DatastoreFailureException {
+  public static final void setUserCredentials(CredentialsInfo credential, CallingContext cc) throws AccessDeniedException, DatastoreFailureException {
     Datastore ds = cc.getDatastore();
     User user = cc.getUserService().getCurrentUser();
     RegisteredUsersTable userDefinition = null;
@@ -907,15 +523,7 @@ public class SecurityServiceUtil {
     }
   }
 
-  /**
-   * Configures the server to have the default role names and role hierarchy.
-   *
-   * @param cc
-   * @throws DatastoreFailureException
-   * @throws AccessDeniedException
-   */
-  public static final void setDefaultRoleNamesAndHierarchy(CallingContext cc)
-      throws DatastoreFailureException, AccessDeniedException {
+  public static final void setDefaultRoleNamesAndHierarchy(CallingContext cc) throws DatastoreFailureException {
 
     ArrayList<UserSecurityInfo> users = new ArrayList<UserSecurityInfo>();
     ArrayList<GrantedAuthorityName> allGroups = new ArrayList<GrantedAuthorityName>();
@@ -934,19 +542,7 @@ public class SecurityServiceUtil {
     setStandardSiteAccessConfiguration(users, allGroups, cc);
   }
 
-  /**
-   * Ensures that a (single) registered user record exists for the superUser,
-   * adds that user to the list of site administrators, establishes that user as
-   * the sole user with permanent access to the permissions management tab, and,
-   * if the user is new, it sets a flag to force the user to visit the
-   * permissions tab upon first access to the site (this is done inside
-   * assertSuperUser).
-   *
-   * @param cc
-   * @throws ODKDatastoreException
-   */
-  public static final synchronized void superUserBootstrap(CallingContext cc)
-      throws ODKDatastoreException {
+  public static final synchronized void superUserBootstrap(CallingContext cc) throws ODKDatastoreException {
     // assert that the superuser exists...
     MessageDigestPasswordEncoder mde = null;
     try {
@@ -977,5 +573,4 @@ public class SecurityServiceUtil {
     UserGrantedAuthority.assertGrantedAuthorityMembers(new SimpleGrantedAuthority(
         GrantedAuthorityName.ROLE_SITE_ACCESS_ADMIN.name()), uriUsers, cc);
   }
-
 }

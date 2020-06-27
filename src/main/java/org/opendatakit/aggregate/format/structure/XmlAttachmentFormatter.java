@@ -19,7 +19,6 @@ import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-
 import org.opendatakit.aggregate.constants.common.FormElementNamespace;
 import org.opendatakit.aggregate.datamodel.FormElementModel;
 import org.opendatakit.aggregate.form.IForm;
@@ -35,9 +34,8 @@ import org.opendatakit.common.web.CallingContext;
 /**
  * Constructs the list of media attachment name+url entries for a given submission.
  * Used in the new briefcase download mechanism.
- * 
- * @author mitchellsundt@gmail.com
  *
+ * @author mitchellsundt@gmail.com
  */
 public class XmlAttachmentFormatter implements SubmissionFormatter, RepeatCallbackFormatter {
 
@@ -46,14 +44,14 @@ public class XmlAttachmentFormatter implements SubmissionFormatter, RepeatCallba
   private PrintWriter output;
 
   public XmlAttachmentFormatter(PrintWriter printWriter,
-      IForm form, CallingContext cc) {
+                                IForm form, CallingContext cc) {
     output = printWriter;
     attachmentFormatter = new XmlMediaAttachmentFormatter(this);
   }
 
 
   @Override
-  public void beforeProcessSubmissions(CallingContext cc) throws ODKDatastoreException {
+  public void beforeProcessSubmissions(CallingContext cc) {
   }
 
   @Override
@@ -62,8 +60,8 @@ public class XmlAttachmentFormatter implements SubmissionFormatter, RepeatCallba
     // format row elements
     for (Submission sub : submissions) {
       Row dataRow = new Row(sub.constructSubmissionKey(null));
-     sub.getFormattedNamespaceValuesForRow(dataRow, Collections.singletonList(FormElementNamespace.VALUES), attachmentFormatter, false, cc);
-     Iterator<String> itr = dataRow.getFormattedValues().iterator();
+      sub.getFormattedNamespaceValuesForRow(dataRow, Collections.singletonList(FormElementNamespace.VALUES), attachmentFormatter, false, cc);
+      Iterator<String> itr = dataRow.getFormattedValues().iterator();
       while (itr.hasNext()) {
         output.append(itr.next());
       }
@@ -71,19 +69,19 @@ public class XmlAttachmentFormatter implements SubmissionFormatter, RepeatCallba
   }
 
   @Override
-  public void afterProcessSubmissions(CallingContext cc) throws ODKDatastoreException {
+  public void afterProcessSubmissions(CallingContext cc) {
   }
-    
-@Override
+
+  @Override
   public void processSubmissions(List<Submission> submissions, CallingContext cc)
       throws ODKDatastoreException {
     beforeProcessSubmissions(cc);
     processSubmissionSegment(submissions, cc);
     afterProcessSubmissions(cc);
   }
-  
+
   public void processRepeatedSubmssionSetsIntoRow(List<SubmissionSet> repeats,
-      FormElementModel repeatElement, Row row, CallingContext cc) throws ODKDatastoreException {
+                                                  FormElementModel repeatElement, Row row, CallingContext cc) throws ODKDatastoreException {
 
     // format repeat row elements
     for (SubmissionSet repeat : repeats) {

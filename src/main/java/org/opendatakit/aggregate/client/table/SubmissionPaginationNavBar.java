@@ -16,12 +16,12 @@
 
 package org.opendatakit.aggregate.client.table;
 
+import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
+import com.google.gwt.user.client.ui.FlexTable;
+import com.google.gwt.user.client.ui.SimplePanel;
 import org.opendatakit.aggregate.client.filter.FilterGroup;
 import org.opendatakit.aggregate.client.submission.SubmissionUISummary;
 import org.opendatakit.aggregate.client.widgets.CursorAdvancementButton;
-
-import com.google.gwt.user.client.ui.FlexTable;
-import com.google.gwt.user.client.ui.SimplePanel;
 
 public class SubmissionPaginationNavBar extends SimplePanel {
 
@@ -44,7 +44,7 @@ public class SubmissionPaginationNavBar extends SimplePanel {
     // create previous button
     controls.setWidget(0, 0, new CursorAdvancementButton(summary, group, false));
 
-    controls.setHTML(0, 1, "<h2 id=\"form_name\">" + summary.getFormTitle() + "</h2>");
+    controls.setHTML(0, 1, new SafeHtmlBuilder().appendHtmlConstant("<h2 id=\"form_name\">").appendEscaped(summary.getFormTitle()).appendHtmlConstant("</h2>").toSafeHtml());
 
     // create next button
     controls.setWidget(0, 2, new CursorAdvancementButton(summary, group, true));

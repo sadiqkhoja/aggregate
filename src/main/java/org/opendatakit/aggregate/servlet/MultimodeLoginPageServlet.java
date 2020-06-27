@@ -20,84 +20,82 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.opendatakit.aggregate.ContextFactory;
+import org.opendatakit.aggregate.HttpUtils;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 import org.opendatakit.common.web.constants.HtmlConsts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Simple servlet to display the openId login page. Invalidates the user's
  * session before displaying the page.
  *
  * @author user
- *
  */
 public class MultimodeLoginPageServlet extends ServletUtilBase {
 
+  public static final String ADDR = "multimode_login.html";
   /**
-     *
-     */
+   *
+   */
   private static final long serialVersionUID = -1036419513113652548L;
   private static final Logger logger = LoggerFactory.getLogger(MultimodeLoginPageServlet.class);
 
-  public static final String ADDR = "multimode_login.html";
-
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException,
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws
       IOException {
     CallingContext cc = ContextFactory.getCallingContext(this, req);
 
-    // Check to make sure we are using the canonical server name.
-    // If not, redirect to that name.  This ensures that authentication
-    // cookies will have the proper realm(s) established for them.
-    String newUrl = cc.getServerURL() + BasicConsts.FORWARDSLASH + ADDR;
-    String query = req.getQueryString();
-    if (query != null && query.length() != 0) {
-      newUrl += "?" + query;
-    }
-    URL url = new URL(newUrl);
-    if (!url.getHost().equalsIgnoreCase(req.getServerName())) {
-      logger.info("Incoming servername: " + req.getServerName() + " expected: " + url.getHost() + " -- redirecting.");
-      // try to get original destination URL from Spring...
-      String redirectUrl = getRedirectUrl(req, ADDR);
-      try {
-        URI uriChangeable = new URI(redirectUrl);
-        URI newUri = new URI(url.getProtocol(), null, url.getHost(), url.getPort(), uriChangeable.getPath(), uriChangeable.getQuery(), uriChangeable.getFragment());
-        newUrl = newUri.toString();
-      } catch (URISyntaxException e) {
-        e.printStackTrace();
+    if (cc.getUserService().getCurrentRealm().getCheckHostnames()) {
+      // Check to make sure we are using the canonical server name.
+      // If not, redirect to that name.  This ensures that authentication
+      // cookies will have the proper realm(s) established for them.
+      String newUrl = cc.getServerURL() + BasicConsts.FORWARDSLASH + ADDR;
+      String query = req.getQueryString();
+      if (query != null && query.length() != 0) {
+        newUrl += "?" + query;
       }
-      // go to the proper page (we'll most likely be redirected back to here for authentication)
-      resp.sendRedirect(newUrl);
-      return;
+      URL url = new URL(newUrl);
+      if (!url.getHost().equalsIgnoreCase(req.getServerName())) {
+        logger.info("Incoming servername: " + req.getServerName() + " expected: " + url.getHost() + " -- redirecting.");
+        // try to get original destination URL from Spring...
+        String redirectUrl = getRedirectUrl(req, ADDR);
+        try {
+          URI uriChangeable = new URI(redirectUrl);
+          URI newUri = new URI(url.getProtocol(), null, url.getHost(), url.getPort(), uriChangeable.getPath(), uriChangeable.getQuery(), uriChangeable.getFragment());
+          newUrl = newUri.toString();
+        } catch (URISyntaxException e) {
+          e.printStackTrace();
+        }
+        // go to the proper page (we'll most likely be redirected back to here for authentication)
+        HttpUtils.redirect(resp, newUrl);
+        return;
+      }
     }
 
     // OK. We are using the canonical server name.
     String redirectParamString = getRedirectUrl(req, AggregateHtmlServlet.ADDR);
     // we need to appropriately cleanse this string for the OpenID login
     // strip off the server pathname portion
-    if ( redirectParamString.startsWith(cc.getSecureServerURL()) ) {
+    if (redirectParamString.startsWith(cc.getSecureServerURL())) {
       redirectParamString = redirectParamString.substring(cc.getSecureServerURL().length());
-    } else if ( redirectParamString.startsWith(cc.getServerURL()) ) {
+    } else if (redirectParamString.startsWith(cc.getServerURL())) {
       redirectParamString = redirectParamString.substring(cc.getServerURL().length());
     }
-    while ( redirectParamString.startsWith("/") ) {
+    while (redirectParamString.startsWith("/")) {
       redirectParamString = redirectParamString.substring(1);
     }
-    
+
     // check for XSS attacks. The redirect string is emitted within single and double
-    // quotes. It is a URL with :, /, ? and # characters. But it should not contain 
+    // quotes. It is a URL with :, /, ? and # characters. But it should not contain
     // quotes, parentheses or semicolons.
     String cleanString = redirectParamString.replaceAll(BAD_PARAMETER_CHARACTERS, "");
-    if ( !cleanString.equals(redirectParamString) ) {
+    if (!cleanString.equals(redirectParamString)) {
       logger.warn("XSS cleanup -- redirectParamString has forbidden characters: " + redirectParamString);
       redirectParamString = cleanString;
     }

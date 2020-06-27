@@ -9,12 +9,11 @@ task packerDownloadPacker() {
   doLast {
     if (!file('packer/packer').exists()) {
       println("Downloading Packer binary")
-      download {
-        src packerZip
-        dest 'packer/packer.zip'
-      }
-      "unzip packer/packer.zip -d packer".execute()
-      "rm packer/packer.zip".execute()
+      "curl -Lo packer/packer.zip ${packerZip}".execute().waitFor()
+      println("Unzipping Packer binary")
+      "unzip packer/packer.zip -d packer".execute().waitFor()
+      println("Cleaning Packer binary zip file")
+      "rm packer/packer.zip".execute().waitFor()
     } else
       println("Packer binary is already present")
   }
@@ -35,9 +34,8 @@ task packerPrepareProject(dependsOn: [packerClean, packerDownloadPacker], type: 
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/jdbc.properties", "jdbc.username", "aggregate")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/jdbc.properties", "jdbc.password", "aggregate")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/jdbc.properties", "jdbc.schema", "aggregate")
-    setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.realm.realmString", "ODK Aggregate VM")
+    setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.realm.realmString", "ODK Aggregate")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.channelType", "ANY_CHANNEL")
-    setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "wink.handlersFactoryClass", "org.opendatakit.aggregate.odktables.impl.api.wink.AppEngineHandlersFactory")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.superUserUsername", "administrator")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.superUser", "")
     setPropertiesValue("${buildDir}/packer/ansible/roles/aggregate/files/ROOT/WEB-INF/classes/security.properties", "security.server.port", "10080")

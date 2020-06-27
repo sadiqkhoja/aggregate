@@ -22,12 +22,8 @@ public interface PreferenceServiceAsync {
 
   void getPreferences(AsyncCallback<PreferenceSummary> callback);
 
-  void setOdkTablesEnabled(Boolean enabled, AsyncCallback<Void> callback);
-
-  void setFasterBackgroundActionsDisabled(Boolean disabled, AsyncCallback<Void> callback);
-
-  void setOdkAppName(String appName, AsyncCallback<Void> callback);
-
   void setSkipMalformedSubmissions(Boolean skipMalformedSubmissions, AsyncCallback<Void> callback);
+
+  void getVersioNote(AsyncCallback<String> callback);
 
 }

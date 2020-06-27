@@ -17,10 +17,8 @@ package org.opendatakit.aggregate.submission.type;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import org.opendatakit.aggregate.datamodel.FormElementModel;
 import org.opendatakit.aggregate.datamodel.SelectChoice;
-import org.opendatakit.aggregate.exception.ODKConversionException;
 import org.opendatakit.aggregate.format.Row;
 import org.opendatakit.aggregate.format.element.ElementFormatter;
 import org.opendatakit.aggregate.submission.SubmissionKeyPart;
@@ -40,20 +38,16 @@ import org.opendatakit.common.security.User;
 import org.opendatakit.common.web.CallingContext;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public class ChoiceSubmissionType extends SubmissionFieldBase<List<String>> {
 
-  boolean isChanged = false;
-  List<String> values = new ArrayList<String>();
-
-  List<SelectChoice> choices = new ArrayList<SelectChoice>();
-
   private final String parentKey;
   private final EntityKey topLevelTableKey;
+  boolean isChanged = false;
+  List<String> values = new ArrayList<String>();
+  List<SelectChoice> choices = new ArrayList<SelectChoice>();
 
   public ChoiceSubmissionType(FormElementModel element, String parentKey, EntityKey topLevelTableKey) {
     super(element);
@@ -63,7 +57,7 @@ public class ChoiceSubmissionType extends SubmissionFieldBase<List<String>> {
 
   @Override
   public void formatValue(ElementFormatter elemFormatter, Row row, String ordinalValue,
-      CallingContext cc) throws ODKDatastoreException {
+                          CallingContext cc) {
     elemFormatter.formatChoices(values, element, ordinalValue, row);
   }
 
@@ -89,7 +83,7 @@ public class ChoiceSubmissionType extends SubmissionFieldBase<List<String>> {
     for (CommonFieldsBase cb : choiceHits) {
       SelectChoice choice = (SelectChoice) cb;
       Long ordinal = choice.getOrdinalNumber();
-      if ( ordinal == null || ordinal.longValue() != expectedOrdinal ) {
+      if (ordinal == null || ordinal.longValue() != expectedOrdinal) {
         String errString = "SELECT * FROM " + choice.getTableName()
             + " WHERE _TOP_LEVEL_AURI = " + choice.getTopLevelAuri()
             + " AND _PARENT_AURI = " + choice.getParentAuri() + " multiple-choice valueSet is missing an entry OR has an extra copy of one";
@@ -103,8 +97,7 @@ public class ChoiceSubmissionType extends SubmissionFieldBase<List<String>> {
   }
 
   @Override
-  public void setValueFromString(String concatenatedValues) throws ODKConversionException,
-      ODKDatastoreException {
+  public void setValueFromString(String concatenatedValues) {
     isChanged = true;
     values.clear();
     if (concatenatedValues != null) {

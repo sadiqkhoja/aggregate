@@ -16,37 +16,39 @@
 package org.opendatakit.aggregate.format.header;
 
 import java.util.List;
-
 import org.opendatakit.aggregate.datamodel.FormElementModel;
 import org.opendatakit.aggregate.datamodel.FormElementModel.ElementType;
 import org.opendatakit.common.web.constants.BasicConsts;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public abstract class AbstractHeaderFormatter implements HeaderFormatter {
 
   protected List<FormElementModel> propertyNames = null;
   protected List<String> headers = null;
   protected List<ElementType> types = null;
-  
+
   @Override
   public List<ElementType> getHeaderTypes() {
     return types;
   }
 
   protected abstract void processGeoPoint(FormElementModel node, String nodeName);
-  
+
+  protected abstract void processJRDate(FormElementModel node, String nodeName);
+
+  protected abstract void processJRTime(FormElementModel node, String nodeName);
+
+  protected abstract void processJRDateTime(FormElementModel node, String nodeName);
+
   /**
    * Helper function to recursively go through the element tree and create the
    * column headings
-   * 
    */
   protected void processElementForColumnHead(FormElementModel node, FormElementModel root,
-      String parentName) {
+                                             String parentName) {
     if (node == null)
       return;
 
@@ -54,43 +56,55 @@ public abstract class AbstractHeaderFormatter implements HeaderFormatter {
     String revisedParentName = parentName;
 
     switch (node.getElementType()) {
-    case GROUP:
-      if (node != root) {
-        // else skip and goto children as we do not know how to display
-        // append parent name incase embedded tag
-        revisedParentName = revisedParentName + node.getElementName() + BasicConsts.COLON;
-      }
-      break;
-    case REPEAT:
-      if (node == root) {
-        // we are processing this as a group...
-        List<FormElementModel> childDataElements = node.getChildren();
-        for (FormElementModel child : childDataElements) {
-          processElementForColumnHead(child, root, revisedParentName);
+      case GROUP:
+        if (node != root) {
+          // else skip and goto children as we do not know how to display
+          // append parent name incase embedded tag
+          revisedParentName = revisedParentName + node.getElementName() + BasicConsts.COLON;
         }
-      } else {
-        // we are processing this as a table element
-          if ( (propertyNames == null) || propertyNames.contains(node)) {
-              headers.add(nodeName);
-              types.add(ElementType.REPEAT);
+        break;
+      case REPEAT:
+        if (node == root) {
+          // we are processing this as a group...
+          List<FormElementModel> childDataElements = node.getChildren();
+          for (FormElementModel child : childDataElements) {
+            processElementForColumnHead(child, root, revisedParentName);
           }
-      }
-      return;
-    case GEOPOINT:
-      processGeoPoint(node, nodeName);
-      break;
-    default:
-      if ( (propertyNames == null) || propertyNames.contains(node)) {
+        } else {
+          // we are processing this as a table element
+          if ((propertyNames == null) || propertyNames.contains(node)) {
+            headers.add(nodeName);
+            types.add(ElementType.REPEAT);
+          }
+        }
+        return;
+      case GEOPOINT:
+        processGeoPoint(node, nodeName);
+        break;
+      case JRDATE:
+        processJRDate(node, nodeName);
+        break;
+      case JRTIME:
+        processJRTime(node, nodeName);
+        break;
+      case JRDATETIME:
+        processJRDateTime(node, nodeName);
+        break;
+      default:
+        if ((propertyNames == null) || propertyNames.contains(node)) {
           headers.add(node.getElementName());
           types.add(node.getElementType());
-      }
+        }
     }
 
     // only recurse into the elements that are not binary, geopoint,
-    // repeat or choice elements
+    // dateTime, repeat or choice elements
     if ((node.getElementType() != ElementType.BINARY)
         && (node.getElementType() != ElementType.REPEAT)
         && (node.getElementType() != ElementType.GEOPOINT)
+        && (node.getElementType() != ElementType.JRDATE)
+        && (node.getElementType() != ElementType.JRTIME)
+        && (node.getElementType() != ElementType.JRDATETIME)
         && (node.getElementType() != ElementType.SELECT1)
         && (node.getElementType() != ElementType.SELECTN)) {
 
@@ -100,5 +114,5 @@ public abstract class AbstractHeaderFormatter implements HeaderFormatter {
       }
     }
   }
-  
+
 }

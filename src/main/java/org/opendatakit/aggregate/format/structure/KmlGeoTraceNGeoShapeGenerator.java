@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.opendatakit.aggregate.constants.format.KmlConsts;
 import org.opendatakit.aggregate.datamodel.FormElementModel;
@@ -32,14 +31,11 @@ import org.opendatakit.aggregate.submission.SubmissionSet;
 import org.opendatakit.aggregate.submission.SubmissionValue;
 import org.opendatakit.aggregate.submission.type.GeoPoint;
 import org.opendatakit.common.persistence.WrappedBigDecimal;
-import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 
 /**
- *
  * @author wbrunette@gmail.com
- *
  */
 public class KmlGeoTraceNGeoShapeGenerator extends AbstractKmlElementBase {
   private static final String LIMITATION_MSG = "limitation: name must be in the submission (top-level) or must be in the same repeat group as the trace/shape";
@@ -49,7 +45,7 @@ public class KmlGeoTraceNGeoShapeGenerator extends AbstractKmlElementBase {
   private FormElementModel nameElement;
 
   public KmlGeoTraceNGeoShapeGenerator(FormElementModel geoField, FormElementModel nameField,
-      FormElementModel rootElement) {
+                                       FormElementModel rootElement) {
     super(geoField, rootElement);
 
     // Verify that nesting constraints hold.
@@ -61,16 +57,46 @@ public class KmlGeoTraceNGeoShapeGenerator extends AbstractKmlElementBase {
 
   }
 
-  boolean childVerifyFieldsArePresent(List<FormElementModel> elements) {
-    if (nameElement != null && !elements.contains(nameElement)) {
-      return false;
+  static List<GeoPoint> parseGeoLineCoordinates(String stringWithCoordinates)
+      throws ODKParseException {
+    List<GeoPoint> points = new ArrayList<GeoPoint>();
+    if (stringWithCoordinates != null) {
+      String[] geoPointStrings = stringWithCoordinates.split(BasicConsts.SEMI_COLON);
+      for (String gpsCoordinate : geoPointStrings) {
+        try {
+
+          String[] values = gpsCoordinate.trim().split("\\s+");
+          GeoPoint coordinates;
+          if (values.length == 1) {
+            if (BasicConsts.EMPTY_STRING.equals(values[0])) {
+              continue;
+            } else {
+              throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING
+                  + gpsCoordinate);
+            }
+          } else if (values.length == 2) {
+            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]));
+          } else if (values.length == 3) {
+            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]),
+                new WrappedBigDecimal(values[2]));
+          } else if (values.length == 4) {
+            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]),
+                new WrappedBigDecimal(values[2]), new WrappedBigDecimal(values[3]));
+          } else {
+            throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING);
+          }
+          points.add(coordinates);
+        } catch (Throwable e) {
+          throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING + gpsCoordinate, e);
+        }
+      }
     }
-    return true;
+    return points;
   }
 
   @Override
   String generatePlacemarkSubmission(Submission sub, List<FormElementModel> propertyNames,
-      CallingContext cc) throws ODKDatastoreException {
+                                     CallingContext cc) {
 
     StringBuilder placemarks = new StringBuilder();
 
@@ -90,7 +116,7 @@ public class KmlGeoTraceNGeoShapeGenerator extends AbstractKmlElementBase {
   }
 
   private void recursiveElementSearchToFindRepeats(SubmissionSet submissionSet,
-      Queue<SubmissionSet> submissionSetLevelsToExamine, StringBuilder placemarks) {
+                                                   Queue<SubmissionSet> submissionSetLevelsToExamine, StringBuilder placemarks) {
     List<SubmissionValue> values = submissionSet.getSubmissionValues();
     if (values == null || values.isEmpty()) {
       return;
@@ -170,43 +196,6 @@ public class KmlGeoTraceNGeoShapeGenerator extends AbstractKmlElementBase {
       }
     }
     return new ArrayList<GeoPoint>(); // return empty array list
-  }
-
-  static List<GeoPoint> parseGeoLineCoordinates(String stringWithCoordinates)
-      throws ODKParseException {
-    List<GeoPoint> points = new ArrayList<GeoPoint>();
-    if (stringWithCoordinates != null) {
-      String[] geoPointStrings = stringWithCoordinates.split(BasicConsts.SEMI_COLON);
-      for (String gpsCoordinate : geoPointStrings) {
-        try {
-
-          String[] values = gpsCoordinate.trim().split("\\s+");
-          GeoPoint coordinates;
-          if (values.length == 1) {
-            if (BasicConsts.EMPTY_STRING.equals(values[0])) {
-              continue;
-            } else {
-              throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING
-                  + gpsCoordinate);
-            }
-          } else if (values.length == 2) {
-            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]));
-          } else if (values.length == 3) {
-            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]),
-                new WrappedBigDecimal(values[2]));
-          } else if (values.length == 4) {
-            coordinates = new GeoPoint(new WrappedBigDecimal(values[0]), new WrappedBigDecimal(values[1]),
-                new WrappedBigDecimal(values[2]), new WrappedBigDecimal(values[3]));
-          } else {
-            throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING);
-          }
-          points.add(coordinates);
-        } catch (Throwable e) {
-          throw new ODKParseException(PARSE_PROBLEM_GEOTRACE_OR_GEOSHAPES_STRING + gpsCoordinate, e);
-        }
-      }
-    }
-    return points;
   }
 
 }

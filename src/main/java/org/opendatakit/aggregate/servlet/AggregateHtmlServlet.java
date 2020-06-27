@@ -19,14 +19,10 @@ package org.opendatakit.aggregate.servlet;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
-
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.opendatakit.aggregate.ContextFactory;
+import org.opendatakit.aggregate.HttpUtils;
 import org.opendatakit.aggregate.constants.common.UIConsts;
 import org.opendatakit.aggregate.server.ServerPreferencesProperties;
 import org.opendatakit.common.persistence.Datastore;
@@ -39,6 +35,8 @@ import org.opendatakit.common.security.spring.SecurityRevisionsTable;
 import org.opendatakit.common.web.CallingContext;
 import org.opendatakit.common.web.constants.BasicConsts;
 import org.opendatakit.common.web.constants.HtmlConsts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Stupid class to wrap the Aggregate.html page that GWT uses for all its UI
@@ -46,18 +44,10 @@ import org.opendatakit.common.web.constants.HtmlConsts;
  * Security.
  *
  * @author mitchellsundt@gmail.com
- *
  */
 public class AggregateHtmlServlet extends ServletUtilBase {
 
-  private static final Logger logger = LoggerFactory.getLogger(AggregateHtmlServlet.class);
-  /**
-     *
-     */
-  private static final long serialVersionUID = 5811797423869654357L;
-
   public static final String ADDR = UIConsts.HOST_PAGE_BASE_ADDR;
-
   public static final String PAGE_CONTENTS_FIRST = "<!doctype html>"
       + "<!-- The DOCTYPE declaration above will set the    -->"
       + "<!-- browser's rendering engine into               -->"
@@ -75,7 +65,7 @@ public class AggregateHtmlServlet extends ServletUtilBase {
       + "   <script type=\"text/javascript\" language=\"javascript\" src=\"javascript/main.js\"></script>"
       + "    <script type=\"text/javascript\" language=\"javascript\" src=\"aggregateui/aggregateui.nocache.js\"></script>"
       + "    <script type=\"text/javascript\" language=\"javascript\" src=\"https://maps.googleapis.com/maps/api/js?";
-      public static final String PAGE_CONTENTS_SECOND = "sensor=false\"></script>"
+  public static final String PAGE_CONTENTS_SECOND = "sensor=false\" async></script>"
       + "    <link type=\"text/css\" rel=\"stylesheet\" href=\"AggregateUI.css\">"
       + "    <link type=\"text/css\" rel=\"stylesheet\" href=\"stylesheets/button.css\">"
       + "    <link type=\"text/css\" rel=\"stylesheet\" href=\"stylesheets/table.css\">"
@@ -91,28 +81,35 @@ public class AggregateHtmlServlet extends ServletUtilBase {
       + "    </noscript>" + "   <div id=\"not_secure_content\"></div><br><div id=\"error_content\"></div><div id=\"dynamic_content\"></div>"
       + "  </body>"
       + "</html>";
+  private static final Logger logger = LoggerFactory.getLogger(AggregateHtmlServlet.class);
+  /**
+   *
+   */
+  private static final long serialVersionUID = 5811797423869654357L;
 
   @Override
-  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException,
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws
       IOException {
     CallingContext cc = ContextFactory.getCallingContext(this, req);
     User user = cc.getCurrentUser();
     UserService userService = cc.getUserService();
 
-    // Check to make sure we are using the canonical server name.
-    // If not, redirect to that name.  This ensures that authentication
-    // cookies will have the proper realm(s) established for them.
     String newUrl = cc.getServerURL() + BasicConsts.FORWARDSLASH + ADDR;
     String query = req.getQueryString();
     if (query != null && query.length() != 0) {
       newUrl += "?" + query;
     }
-    URL url = new URL(newUrl);
-    if (!url.getHost().equalsIgnoreCase(req.getServerName())) {
-      // we should redirect over to the proper fully-formed URL.
-      logger.info("Incoming servername: " + req.getServerName() + " expected: " + url.getHost() + " -- redirecting.");
-      resp.sendRedirect(newUrl);
-      return;
+    if (userService.getCurrentRealm().getCheckHostnames()) {
+      // Check to make sure we are using the canonical server name.
+      // If not, redirect to that name.  This ensures that authentication
+      // cookies will have the proper realm(s) established for them.
+      URL url = new URL(newUrl);
+      if (!url.getHost().equalsIgnoreCase(req.getServerName())) {
+        // we should redirect over to the proper fully-formed URL.
+        logger.info("Incoming servername: " + req.getServerName() + " expected: " + url.getHost() + " -- redirecting.");
+        HttpUtils.redirect(resp, newUrl);
+        return;
+      }
     }
 
     // OK. We are using the canonical server name.
@@ -145,7 +142,7 @@ public class AggregateHtmlServlet extends ServletUtilBase {
       if (directToConfigTab) {
         newUrl += "#admin/permission///";
         logger.info("Redirect to configuration tab: " + newUrl);
-        resp.sendRedirect(newUrl);
+        HttpUtils.redirect(resp, newUrl);
         return;
       }
     }
@@ -158,7 +155,7 @@ public class AggregateHtmlServlet extends ServletUtilBase {
     String simpleApiKey;
     try {
       simpleApiKey = ServerPreferencesProperties.getGoogleSimpleApiKey(cc);
-      if ( simpleApiKey != null && simpleApiKey.length() != 0 ) {
+      if (simpleApiKey != null && simpleApiKey.length() != 0) {
         out.print("key=" + encodeParameter(simpleApiKey) + "&amp;");
       }
     } catch (ODKEntityNotFoundException e) {

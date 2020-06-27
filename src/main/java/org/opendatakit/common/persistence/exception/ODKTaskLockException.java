@@ -16,30 +16,20 @@
 package org.opendatakit.common.persistence.exception;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
-public class ODKTaskLockException extends Exception{
-  
+public class ODKTaskLockException extends Exception {
+
   /**
    * Serial number for serialization
    */
   private static final long serialVersionUID = 8885994216437564799L;
 
   /**
-   * Default constructor
-   */
-  public ODKTaskLockException() {
-    super();
-  }
-  
-  /**
    * Construct exception with the error message
-   * 
-   * @param message
-   *    exception message
+   *
+   * @param message exception message
    */
   public ODKTaskLockException(String message) {
     super(message);
@@ -47,11 +37,9 @@ public class ODKTaskLockException extends Exception{
 
   /**
    * Construction exception with error message and throwable cause
-   * 
-   * @param message
-   *    exception message
-   * @param cause
-   *    throwable cause
+   *
+   * @param message exception message
+   * @param cause   throwable cause
    */
   public ODKTaskLockException(String message, Throwable cause) {
     super(message, cause);
@@ -59,9 +47,8 @@ public class ODKTaskLockException extends Exception{
 
   /**
    * Construction exception with throwable cause
-   * 
-   * @param cause
-   *    throwable cause
+   *
+   * @param cause throwable cause
    */
   public ODKTaskLockException(Throwable cause) {
     super(cause);

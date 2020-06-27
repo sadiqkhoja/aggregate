@@ -18,17 +18,15 @@ package org.opendatakit.common.persistence;
 import org.opendatakit.common.persistence.exception.ODKTaskLockException;
 
 /**
- * 
  * @author wbrunette@gmail.com
  * @author mitchellsundt@gmail.com
- * 
  */
 public interface TaskLock {
-  
-  boolean obtainLock(String lockId, String formId, ITaskLockType taskType) throws ODKTaskLockException;
-  
-  boolean renewLock(String lockId, String formId, ITaskLockType taskType) throws ODKTaskLockException;
-  
+
+  boolean obtainLock(String lockId, String formId, ITaskLockType taskType);
+
+  boolean renewLock(String lockId, String formId, ITaskLockType taskType);
+
   boolean releaseLock(String lockId, String formId, ITaskLockType taskType) throws ODKTaskLockException;
-  
+
 }

@@ -1,145 +1,96 @@
 # ODK Aggregate
 ![Platform](https://img.shields.io/badge/platform-Java-blue.svg)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Build status](https://circleci.com/gh/opendatakit/aggregate.svg?style=shield&circle-token=:circle-token)](https://circleci.com/gh/opendatakit/aggregate)
-[![Slack status](http://slack.opendatakit.org/badge.svg)](http://slack.opendatakit.org)
- 
-ODK Aggregate provides a ready-to-deploy server and data repository to:
+[![Build status](https://circleci.com/gh/getodk/aggregate.svg?style=shield&circle-token=:circle-token)](https://circleci.com/gh/getodk/aggregate)
+[![Slack status](http://slack.getodk.org/badge.svg)](http://slack.getodk.org)
 
-- provide blank forms to ODK Collect (or other OpenRosa clients),
-- accept finalized forms (submissions) from ODK Collect and manage collected data,
-- visualize the collected data using maps and simple graphs,
-- export data (e.g., as CSV files for spreadsheets, or as KML files for Google Earth), and
-- publish data to external systems (e.g., Google Spreadsheets or Google Fusion Tables).
+ODK Aggregate provides a ready-to-deploy server and database to:
 
-ODK Aggregate can be deployed on Google's App Engine, enabling users to quickly get running without facing the complexities of setting up their own scalable web service. ODK Aggregate can also be deployed locally on a Tomcat server (or any servlet 2.5-compatible (or higher) web container) backed with a MySQL or PostgreSQL database server.
+- provide blank forms to ODK Collect (or other OpenRosa clients)
+- accept submissions (finalized forms) from ODK Collect and manage collected data
+- visualize the collected data using maps and simple graphs
+- export submissions in CSV, KML, and JSON format
+- publish submissions to external systems like Google Spreadsheets
 
-* ODK website: [https://opendatakit.org](https://opendatakit.org)
-* ODK Aggregate usage instructions: [https://opendatakit.org/use/aggregate/](https://opendatakit.org/use/aggregate/)
-* ODK forum: [https://forum.opendatakit.org](https://forum.opendatakit.org)
-* ODK developer Slack chat: [http://slack.opendatakit.org](http://slack.opendatakit.org) 
-* ODK developer Slack archive: [http://opendatakit.slackarchive.io](http://opendatakit.slackarchive.io) 
-* ODK developer wiki: [https://github.com/opendatakit/opendatakit/wiki](https://github.com/opendatakit/opendatakit/wiki)
+ODK Aggregate can be deployed on an Apache Tomcat server, or any servlet 2.5-compatible (or higher) web container, backed with a PostgreSQL or a MySQL database server.
+
+* ODK website: [https://getodk.org](https://getodk.org)
+* ODK Aggregate usage instructions: [https://docs.getodk.org/aggregate-intro/](https://docs.getodk.org/aggregate-intro/)
+* ODK forum: [https://forum.getodk.org](https://forum.getodk.org)
+* ODK developer Slack chat: [http://slack.getodk.org](http://slack.getodk.org)
 
 ## Getting the code
 
 1. Fork the Aggregate project ([why and how to fork](https://help.github.com/articles/fork-a-repo/))
 
-1. Install [Git LFS](https://git-lfs.github.com/)
+2. Install [Git LFS](https://git-lfs.github.com/)
 
-1. Clone your fork of the project locally. At the command line:
+3. Clone your fork of the project locally. At the command line:
 
-        git clone https://github.com/YOUR-GITHUB-USERNAME/aggregate
+    `git clone https://github.com/YOUR-GITHUB-USERNAME/aggregate`
 
 ## Setting up the database
 
-Aggregate supports a variety of DBs, but we strongly recommend you use PostgreSQL first to ensure everything is working. If you wish to use another DB (e.g., Google App Engine, MySQL, or SQLServer databases) after that see [database configurations](docs/database-configurations.md).
+Aggregate supports a variety of database engines, but we strongly recommend PostgreSQL. If you wish to use MySQL, see the [database configurations](docs/database-configurations.md) guide.
 
 ### PostgreSQL with Docker
 
 1. Install [Docker](https://www.docker.com) and [Docker Compose](https://docs.docker.com/compose)
 
-1. To start the development server run the gradle task `postgresqlComposeUp` with the command: `./gradlew postgresqlComposeUp`
-    * Make sure port **5432** is not used by any other service in your computer. You can change this editing the `ports` section of the `db/postgresql/docker-compose.yml` configuration file. Be sure to check the documentation: [Compose file version 3 reference - Ports section](https://docs.docker.com/compose/compose-file/#ports).
+2. Start the development server with `./gradlew postgresqlComposeUp`
 
-1. To stop the server run the gradle task `postgresqlComposeDown` with the command: `./gradlew postgresqlComposeDown`.
+    Check that the port number **5432** is not used by any other service in your computer. You can change this editing the `ports` section of the `db/postgresql/docker-compose.yml` configuration file. Be sure to check the documentation: [Compose file version 3 reference - Ports section](https://docs.docker.com/compose/compose-file/#ports).
 
-Alternatively, you can use the `docker-compose` command line tool to start & stop the development server. All configuration files regarding the development server are at `db/postgresql` path. Check the [online documentation](https://docs.docker.com/compose).   
+3. Stop the server with `./gradlew postgresqlComposeDown`
+
+For more information see [here for Docker](docs/build-and-run-a-docker-image.md) and [here for Docker Compose]((docs/build-and-run-with-docker-compose.md).
 
 ### Local PostgreSQL server
 
-1. Download and install [PostgreSQL 9](https://www.postgresql.org/download) or later.
-    * If you are a macOS user, we recommend [Postgres.app](http://postgresapp.com/). If you are a Windows user, we recommend [BigSQL](https://www.openscg.com/bigsql/postgresql/installers.jsp).
+1. Download and install [PostgreSQL 9](https://www.postgresql.org/download) or later
 
-1. In the command-line interface connect to the database. Assuming the user is postgres and the server is installed on your local machine, the command will be: `psql -U postgres -h localhost`.
+    - If you are a macOS user, we recommend [Postgres.app](http://postgresapp.com/)
+    - If you are a Windows user, we recommend [BigSQL](https://www.openscg.com/bigsql/postgresql/installers.jsp)
 
-1. Setup your database with these commands. You must use `psql` or the `\connect` command will not work.
+2. In a command.line terminal, run the following commands to set up a database for Aggregate:
 
-    ```sql
-    CREATE USER "odk_unit" WITH UNENCRYPTED PASSWORD 'test';
-    CREATE DATABASE odk_db WITH OWNER odk_unit;
-    GRANT ALL PRIVILEGES ON DATABASE odk_db TO odk_unit;
-    \connect odk_db;
-    CREATE SCHEMA odk_db;
-    GRANT ALL PRIVILEGES ON SCHEMA odk_db TO odk_unit;
+    (Linux and macOS)
+    ```bash
+    sudo su postgres -c "psql -c \"CREATE ROLE aggregate WITH LOGIN PASSWORD 'aggregate'\""
+    sudo su postgres -c "psql -c \"CREATE DATABASE aggregate WITH OWNER aggregate\""
+    sudo su postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE aggregate TO aggregate\""
+    sudo su postgres -c "psql -c \"CREATE SCHEMA aggregate\" aggregate"
+    sudo su postgres -c "psql -c \"ALTER SCHEMA aggregate OWNER TO aggregate\" aggregate"
+    sudo su postgres -c "psql -c \"GRANT ALL PRIVILEGES ON SCHEMA aggregate TO aggregate\" aggregate"
     ```
 
-## Running the project
-Aggregate is built using Gradle and Gretty, but we strongly recommend you use [IntelliJ IDEA](https://www.jetbrains.com/idea/) first to ensure everything is working. If you wish to use another development environment after that, run `./gradlew tasks` to get a sense of your options.
+    (Windows)
+    ```powershell
+    psql.exe -c "CREATE ROLE aggregate WITH LOGIN PASSWORD 'aggregate'"
+    psql.exe -c "CREATE DATABASE aggregate WITH OWNER aggregate"
+    psql.exe -c "GRANT ALL PRIVILEGES ON DATABASE aggregate TO aggregate"
+    psql.exe -c "CREATE SCHEMA aggregate" aggregate
+    psql.exe -c "ALTER SCHEMA aggregate OWNER TO aggregate" aggregate
+    psql.exe -c "GRANT ALL PRIVILEGES ON SCHEMA aggregate TO aggregate" aggregate
+    ```
 
-### Import 
+## Building and Running the project
 
-1. On the welcome screen, click `Import Project`, navigate to your aggregate folder, and select the `build.gradle` file. 
+- Copy the `jdbc.properties.example`, `odk-settings.xml.example`, and `security.properties.example` files at `/src/main/resources` to the same location, removing the `.example` extension.
 
-1. Make sure you check `Use auto-import` option in the `Import Project from Gradle` dialog 
+  If you have followed the database configuration steps above, you don't need to make any change in these files. Otherwise, head to the [Aggregate configuration guide](docs/aggregate-config.md) and make the required changes for your environment.
 
-1. Once the project is imported, IntelliJ may ask you configure any detected GWT, Spring or web Facets, you can ignore these messages
+  If you are running the project in Docker, see [here](docs/build-and-run-a-docker-image.md) for the next steps.
 
-### Configure
+- Start a local development Aggregate server with `./gradlew appRunWar`
 
-1. If you are running Java 9, make sure you also have Java 8 installed. Aggregate will not compile with Java 9.
+  Gradle will compile the project and start the server, which can take some time.
 
-1. Copy `gradle.properties.example` to a `gradle.properties` file at the root of the project and fill in your setup configuration
+  Eventually, you will see a "Press any key to stop the server" message. At this point, you can browse http://localhost:8080 to use Aggregate.
 
-    | Key | Valid values | Description |
-    | --- | ------------ | ----------- |
-    | `warMode` | `complete` or `installer` | Use `installer` if you are going to produce an installer with the resulting WAR artifact and `complete` otherwise |
-    | `aggregateInstanceName`|  | Only required for GAE deployment. The name of your instance. It's important that this value doesn't change for an already existing Aggregate instance |
-    | `aggregateUsername` |  | Only required for GAE deployment. The username of the Aggregate superuser |
-    | `gaeAppId` |  | Only required for GAE deployment. The Google AppEngine project Id |
-    | `gaeEmail` |  | Only required for GAE deployment. The email account of the owner of the Google AppEngine instance |
-    | `org.gradle.java.home` |  | Set path to a Java 8 install. This is only required if you have Java 9 installed.  |
+- Stop the server pressing any key in the terminal where you started the server
 
-    - Any property can be overwritten by passing `-Pkey=value` arguments to any Gradle task. 
-    
-### Run
-
-1. In the `Run` menu, select `Edit Configurations...`
-
-1. Press the + button to add a `Gradle` configuration
-
-    * Name: `appStartWar` (or whatever you'd like)
-    * Gradle project: `odk-aggregate`
-    * Tasks: `appStartWar`
-
-1. Press `OK`
-
-1. To run Aggregate, go to the `Run` menu, then to `Run...` and `Run` the `appStartWar` configuration. This will start Aggregate. 
-
-1. You should now be able to browse [http://localhost:8080](http://localhost:8080)
-
-### Run the tests
-
-1. Copy one of the example `jdbc.properties.example_*` and `odk-settings.xml.example_*` files on `src/test/resources/` into the same place removing the `.example_*` extension. Choose the variant corresponding to your test database engine.
-
-1. Make sure your jdbc settings are correct. The examples use the default database name, user and password settings.
-
-1. Right click on the `src/test/java` folder on IntelliJ and select `Run all Tests` option.
-
-### Debug
-
-1. In the `Run` menu, select `Edit Configurations...`
-
-1. Press the + button to add a `Gradle` configuration
-
-     * Name: `appStartWarDebug` (or whatever you'd like)
-     * Gradle project: `odk-aggregate`
-     * Tasks: `appStartWarDebug`
-
-1. Press `Apply` and then press the + button to add a `Remote` configuration
-
-     * Name: `appServer` (or whatever you'd like)
-     * Host: `localhost`
-     * Port: `5005`
-     * Search sources using module's classpath: `aggregate`
-
-1. Press `OK`
-
-1. To debug Aggregate, go to the `Run` menu, then to `Run...` and `Run` (not Debug!) the `appStartWarDebug` configuration. This will start Aggregate in debug mode and wait for a debugging session to be connected to the server's debugging listener.
-
-1. Now, go to the `Run` menu, then to `Run...` and `Debug` the `appServer`. This will connect the debugger. 
-
-1. You should now be able to browse [http://localhost:8080](http://localhost:8080) and debug
+If you have more than one Java version installed in your computer, you can ensure that Java 8 will be used when running Gradle tasks from the command-line by adding `-Porg.gradle.java.home={PATH_TO_JAVA8_HOME}` to the task.
 
 ### Connect from an external device
 
@@ -148,38 +99,67 @@ By default, Gretty will launch a server using a `localhost` address which will n
 - In `src/main/resources/security.properties`, change `security.server.hostname` to the address
 - In `build.gradle`, inside the `gretty` block, change `host` to the same address
 
-### Deploy to Google App Engine
+## Setting up your development environment
 
-1. Follow part of the official instructions for [Installing on App Engine (Cloud)](http://docs.opendatakit.org/aggregate-install/#installing-on-app-engine). Stop after Google configures the server, and before the tutorial.
+These instructions are for [IntelliJ IDEA Community edition](https://www.jetbrains.com/idea/), which is the (free) Java IDE we use for all the ODK toolsuite, but you don't really need any specific IDE to work with this codebase. Any Java IDE will support any of the steps we will be describing.
 
-1. Press the + button to add a `Gradle` configuration
+### Import
 
-    * Name: `gaeUpdate` (or whatever you'd like)
-    * Gradle project: `odk-aggregate`
-    * Tasks: `gaeUpdate`
-    
-1. Press `OK`
+- On the welcome screen, click `Import Project`, navigate to your aggregate folder, and select the `build.gradle` file.
 
-1. Edit `gradle.properties` file at the root of the project and set its values according to your Google App Engine instance:
+  Make sure you check `Use auto-import` option in the `Import Project from Gradle` dialog.
 
-    | Key | Default | Description |
-    | --- | ------- | ----------- |
-    | `warMode` | `complete` | WAR build mode. Leave set to `complete` for GAE deployments |
-    | `aggregateInstanceName` | `aggregate` | ODK Aggregate instance name. Set this value to whatever is already set in the currently running Aggregate instance. Any changes to this will invalidate all the ODK Aggregate passwords |
-    | `aggregateUsername` | `administrator` | ODK Aggregate administrator name |
-    | `gaeAppId` | `aggregate` | App Engine project ID |
-    | `gaeEmail` | `some.email@example.org` | Your Google Cloud account's email address |
-    
-    - Alternatively, you can overwrite these properties by adding `-Pkey=value` arguments to your Gradle task invocations
+  Ignore any message about any detected GWT, Spring or web facets.
 
-1. Authenticate yourself using one of the following methods described in [How the Application Default Credentials Work](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork) guide of Google Cloud Platform.
- 
-    * We recommend the option of [installing Google Cloud SDK](https://cloud.google.com/sdk/downloads) and running the command `gcloud auth application-default login`.
-    * Any other option will require adjustments in the Run configuration for `gaeUpdate`
+- Make sure you set Java 8 as the project's selected SDK
 
-1. To run Aggregate, go to the `Run` menu, then to `Run...` and `Run` the `gaeUpdate` configuration. This will compile Aggregate and upload it to App Engine, replacing your running instance with the new version.
+### Run
 
-This process can fail sometimes. If that happens, you will have to manually rollback the failed update launching the `gaeRollback` task. You can follow these same steps to create a new Run Configuration for it. 
+1. Show the Gradle tool window by selecting the menu option at **View** > **Tool Windows** > **Gradle**
+
+    You will see a new panel on the right side with all the Gradle task groups
+
+2. Double click the `appRunWar` Gradle task under the `gretty` task group
+
+    A new `Run` bottom panel will pop up.
+
+    Gradle will compile the project and start the server, which can take some time.
+
+    Eventually, you will see a "Press any key to stop the server" message. At this point, you can browse http://localhost:8080 to use Aggregate.
+
+You can stop the server by pressing any key in the `Run` panel.
+
+### Debug
+
+1. In the `Run` menu, select `Edit Configurations...`
+
+2. Press the + button to add a `Remote` configuration
+
+    - Name: `Debug Aggregate` (or whatever you'd like)
+    - Host: `localhost`
+    - Port: `5005`
+    - Search sources using module's classpath: `aggregate`
+
+3. Press `OK`
+
+4. Run Aggregate with the `appRunWarDebug` task (double click it on the Gradle panel at the right side)
+
+5. Run the `Debug Aggregate` run configuration you've created (use the debug button, not the play button, which should be disabled)
+
+Eventually, the compilation will finish and the server will be ready for you to browse [http://localhost:8080](http://localhost:8080)
+
+To stop the debugging session, press any key in the `Run` bottom panel. This will close your debug process in the `Debug` bottom panel as well.
+
+## Extended topics
+
+There is a [`/docs`](https://github.com/getodk/aggregate/tree/master/docs) directory in the repo with more documentation files that expand on certain topics:
+
+- [Configuration files](./docs/aggregate-config.md)
+- [Supported database configurations](./docs/database-configurations.md)
+- [Build the Installer app](docs/build-the-installer-app.md)
+- [Build and run a Docker image](docs/build-and-run-a-docker-image.md)
+- [Build and run with Docker Compose](docs/build-and-run-with-docker-compose.md)
+- [Build and run a Virtual Machine](docs/build-and-run-a-virtual-machine.md)
 
 ## Contributing
 
@@ -195,6 +175,6 @@ The best way to help us test is to build from source! We are currently focusing 
 
 * If you get an **Invalid Gradle JDK configuration found** error importing the code, you might not have set the `JAVA_HOME` environment variable. Try [these solutions](https://stackoverflow.com/questions/32654016/).
 
-* If you are having problems with hung Tomcat/Jetty processes, try running the `appStop` Gradle task to stop running all instances. 
+* If you are having problems with hung Tomcat/Jetty processes, try running the `appStop` Gradle task to stop running all instances.
 
 * If you're using Chrome and are seeing blank pages or refreshing not working, connect to Aggregate with the dev tools window open. Then in the `Network` tab, check `Disable cache`.

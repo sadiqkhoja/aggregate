@@ -16,10 +16,9 @@
 
 package org.opendatakit.aggregate.server;
 
+import com.google.gwt.user.server.rpc.RemoteServiceServlet;
 import java.util.List;
-
 import javax.servlet.http.HttpServletRequest;
-
 import org.opendatakit.aggregate.ContextFactory;
 import org.opendatakit.aggregate.client.exception.FormNotAvailableException;
 import org.opendatakit.aggregate.client.exception.RequestFailureException;
@@ -34,10 +33,7 @@ import org.opendatakit.aggregate.form.IForm;
 import org.opendatakit.common.persistence.client.exception.DatastoreFailureException;
 import org.opendatakit.common.persistence.exception.ODKDatastoreException;
 import org.opendatakit.common.persistence.exception.ODKOverQuotaException;
-import org.opendatakit.common.security.client.exception.AccessDeniedException;
 import org.opendatakit.common.web.CallingContext;
-
-import com.google.gwt.user.server.rpc.RemoteServiceServlet;
 
 public class FilterServiceImpl extends RemoteServiceServlet implements FilterService {
 
@@ -63,7 +59,7 @@ public class FilterServiceImpl extends RemoteServiceServlet implements FilterSer
       List<SubmissionFilterGroup> filterGroupList = SubmissionFilterGroup.getFilterGroupList(
           formId, cc);
       for (SubmissionFilterGroup group : filterGroupList) {
-        if(group.isPublic()) {
+        if (group.isPublic()) {
           filterSet.addFilterGroup(group.transform());
         }
       }
@@ -81,7 +77,7 @@ public class FilterServiceImpl extends RemoteServiceServlet implements FilterSer
   }
 
   @Override
-  public String updateFilterGroup(FilterGroup group) throws AccessDeniedException, RequestFailureException, DatastoreFailureException {
+  public String updateFilterGroup(FilterGroup group) throws RequestFailureException, DatastoreFailureException {
     HttpServletRequest req = this.getThreadLocalRequest();
     CallingContext cc = ContextFactory.getCallingContext(this, req);
 
@@ -99,7 +95,7 @@ public class FilterServiceImpl extends RemoteServiceServlet implements FilterSer
   }
 
   @Override
-  public Boolean deleteFilterGroup(FilterGroup group) throws AccessDeniedException, RequestFailureException, DatastoreFailureException {
+  public Boolean deleteFilterGroup(FilterGroup group) throws RequestFailureException, DatastoreFailureException {
     HttpServletRequest req = this.getThreadLocalRequest();
     CallingContext cc = ContextFactory.getCallingContext(this, req);
 
